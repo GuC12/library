@@ -4,9 +4,8 @@ import { Link } from 'wouter';
 function GateMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${compact ? 'text-sm' : ''}`} data-testid="brand-gatehouse">
-      <span className="relative flex h-9 w-9 items-end justify-center rounded-[11px] bg-[hsl(var(--sidebar))] pb-1.5 shadow-sm">
-        <span className="absolute top-[8px] h-[18px] w-[16px] rounded-t-[9px] border-[3px] border-[hsl(var(--card))] border-b-0" />
-        <span className="h-[3px] w-[24px] rounded-full bg-[hsl(var(--accent))]" />
+      <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-[hsl(var(--sidebar))] shadow-sm">
+        <BookOpen className="h-5 w-5 text-[hsl(var(--card))]" strokeWidth={1.8} aria-hidden="true" />
       </span>
       <span className="font-serif text-xl font-semibold tracking-[-0.02em] text-[hsl(var(--foreground))]">The Library</span>
     </span>
@@ -41,7 +40,7 @@ export function HomePage() {
             A quieter way <span className="font-serif text-[hsl(var(--primary))]">in.</span>
           </h1>
           <p className="animate-rise-in animate-rise-in-delay-2 mt-8 max-w-lg text-base leading-7 text-[hsl(var(--muted-foreground))] sm:text-lg">
-            Create an account once, then step straight into your library. Returning readers can sign in and continue to the collection without registering again.
+            Create an account once, then choose where to go. Open the library when you are ready, or stay here to manage your account.
           </p>
           <div className="animate-rise-in animate-rise-in-delay-3 mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link href="/sign-up" className="group inline-flex items-center justify-center gap-3 rounded-full bg-[hsl(var(--accent))] px-6 py-3.5 text-sm font-extrabold text-[hsl(var(--accent-foreground))] shadow-[0_10px_24px_hsl(var(--accent)/.22)] transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2" data-testid="link-create-account-hero">
@@ -62,23 +61,24 @@ export function HomePage() {
         <div className="relative mx-auto w-full max-w-[540px] lg:mr-0">
           <div className="absolute -inset-5 rounded-[3rem] bg-[hsl(var(--accent)/.12)] blur-2xl" aria-hidden="true" />
           <div className="gate-grid animate-rise-in animate-rise-in-delay-2 relative min-h-[470px] overflow-hidden rounded-[2.5rem] bg-[hsl(var(--sidebar))] p-5 shadow-[0_26px_70px_hsl(33.5_37.8%_17.6%/.24)] sm:min-h-[530px] sm:p-7">
+            <div className="absolute inset-0 opacity-45" aria-hidden="true">
+              <img src={`${import.meta.env.BASE_URL}reading-illustration.png`} alt="" className="h-full w-full object-cover object-center mix-blend-screen" />
+              <div className="absolute inset-0 bg-[hsl(var(--sidebar)/.48)] mix-blend-multiply" />
+            </div>
             <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full border border-[hsl(var(--accent)/.26)]" aria-hidden="true" />
             <div className="absolute -right-4 -top-4 h-32 w-32 rounded-full border border-[hsl(var(--accent)/.16)]" aria-hidden="true" />
-            <div className="flex items-center justify-between">
+            <div className="relative z-10 flex items-center justify-between">
               <GateMark compact />
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[hsl(var(--sidebar-foreground)/.55)]">LIB / 01</span>
             </div>
-            <div className="relative mt-20 flex items-center justify-center sm:mt-24">
+            <div className="relative z-10 mt-20 flex items-center justify-center sm:mt-24">
               <div className="absolute h-64 w-64 rounded-full border border-[hsl(var(--sidebar-foreground)/.12)] sm:h-80 sm:w-80" />
               <div className="absolute h-48 w-48 rounded-full border border-[hsl(var(--sidebar-foreground)/.14)] sm:h-60 sm:w-60" />
-              <div className="animate-drift relative flex h-36 w-36 items-end justify-center rounded-t-[5rem] border-[10px] border-b-0 border-[hsl(var(--card))] bg-[hsl(var(--sidebar)/.55)] pb-[-1px] sm:h-44 sm:w-44">
-                <div className="absolute -bottom-3 h-3 w-52 rounded-full bg-[hsl(var(--accent))] shadow-[0_0_0_7px_hsl(var(--sidebar)),0_7px_20px_hsl(var(--accent)/.28)] sm:w-64" />
-                <div className="mb-7 flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] shadow-sm">
-                  <div className="h-2.5 w-2.5 rounded-full bg-[hsl(var(--sidebar))]" />
-                </div>
+              <div className="animate-drift flex h-36 w-44 items-center justify-center rounded-3xl border border-[hsl(var(--card)/.4)] bg-[hsl(var(--sidebar)/.46)] shadow-[0_18px_35px_hsl(33.5_37.8%_17.6%/.2)] sm:h-44 sm:w-56">
+                <BookOpen className="h-20 w-20 text-[hsl(var(--card)/.9)]" strokeWidth={1} aria-hidden="true" />
               </div>
             </div>
-            <div className="absolute bottom-7 left-7 right-7 flex items-end justify-between">
+            <div className="absolute bottom-7 left-7 right-7 z-10 flex items-end justify-between">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--sidebar-foreground)/.53)]">Reading room</p>
                 <p className="mt-1 text-sm font-bold text-[hsl(var(--sidebar-foreground))]">Your place is waiting</p>
@@ -127,7 +127,7 @@ export function HomePage() {
           </div>
           <div className="space-y-7">
             <div><p className="font-bold text-[hsl(var(--foreground))]">Register or sign in</p><p className="mt-1 text-sm leading-6 text-[hsl(var(--muted-foreground))]">New readers register; returning readers simply sign in.</p></div>
-            <div><p className="font-bold text-[hsl(var(--foreground))]">Enter the library</p><p className="mt-1 text-sm leading-6 text-[hsl(var(--muted-foreground))]">After access is confirmed, we open the library site for you.</p></div>
+            <div><p className="font-bold text-[hsl(var(--foreground))]">Choose your next step</p><p className="mt-1 text-sm leading-6 text-[hsl(var(--muted-foreground))]">After access is confirmed, you decide whether to open the library or stay here.</p></div>
           </div>
         </div>
       </section>

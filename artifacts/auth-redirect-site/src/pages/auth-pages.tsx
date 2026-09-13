@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, BookOpen } from 'lucide-react';
 import { SignIn, SignUp } from '@clerk/react';
 import type { ReactNode } from 'react';
 import { Link } from 'wouter';
@@ -11,9 +11,8 @@ function AuthFrame({ children, mode }: { children: ReactNode; mode: 'sign-in' | 
       <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8 lg:px-12">
         <Link href="/" className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="link-auth-brand">
           <span className="inline-flex items-center gap-2.5">
-            <span className="relative flex h-9 w-9 items-end justify-center rounded-[11px] bg-[hsl(var(--sidebar))] pb-1.5">
-              <span className="absolute top-[8px] h-[18px] w-[16px] rounded-t-[9px] border-[3px] border-[hsl(var(--card))] border-b-0" />
-              <span className="h-[3px] w-[24px] rounded-full bg-[hsl(var(--accent))]" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-[hsl(var(--sidebar))]">
+              <BookOpen className="h-5 w-5 text-[hsl(var(--card))]" strokeWidth={1.8} aria-hidden="true" />
             </span>
             <span className="font-serif text-xl font-semibold tracking-[-0.02em] text-[hsl(var(--foreground))]">The Library</span>
           </span>
