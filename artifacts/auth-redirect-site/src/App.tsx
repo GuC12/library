@@ -36,20 +36,20 @@ const clerkAppearance = {
     socialButtonsVariant: 'blockButton' as const,
   },
   variables: {
-    colorPrimary: 'hsl(190 39% 29%)',
-    colorForeground: 'hsl(224 28% 15%)',
-    colorMutedForeground: 'hsl(221 12% 43%)',
+    colorPrimary: 'hsl(32.7 26.5% 32.5%)',
+    colorForeground: 'hsl(33.5 37.8% 17.6%)',
+    colorMutedForeground: 'hsl(33.5 24% 34%)',
     colorDanger: 'hsl(4 63% 46%)',
-    colorBackground: 'hsl(42 33% 98%)',
-    colorInput: 'hsl(41 38% 95%)',
-    colorInputForeground: 'hsl(224 28% 15%)',
-    colorNeutral: 'hsl(39 25% 83%)',
+    colorBackground: 'hsl(42 42% 97%)',
+    colorInput: 'hsl(40.7 24.6% 86%)',
+    colorInputForeground: 'hsl(33.5 37.8% 17.6%)',
+    colorNeutral: 'hsl(40.7 24.6% 55.3%)',
     fontFamily: 'Manrope, ui-sans-serif, sans-serif',
     borderRadius: '0.85rem',
   },
   elements: {
     rootBox: 'w-full flex justify-center',
-    cardBox: 'bg-[hsl(42_33%_98%)] border border-[hsl(39_25%_83%)] rounded-2xl w-[440px] max-w-full overflow-hidden shadow-[0_16px_40px_hsl(224_28%_15%/.08)]',
+    cardBox: 'bg-[hsl(42_42%_97%)] border border-[hsl(40.7_24.6%_55.3%)] rounded-2xl w-[440px] max-w-full overflow-hidden shadow-[0_16px_40px_hsl(33.5_37.8%_17.6%/.12)]',
     card: '!shadow-none !border-0 !bg-transparent !rounded-none',
     footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
     headerTitle: 'text-[hsl(224_28%_15%)] font-extrabold tracking-tight',
@@ -91,7 +91,7 @@ function UserPortalRoute() {
 function AuthLoadingState() {
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-[hsl(var(--background))] px-5">
-      <div className="w-full max-w-sm space-y-4" aria-label="Loading Gatehouse">
+      <div className="w-full max-w-sm space-y-4" aria-label="Loading the Library">
         <div className="mx-auto h-14 w-14 animate-pulse rounded-2xl bg-[hsl(var(--secondary))]" />
         <div className="mx-auto h-4 w-36 animate-pulse rounded-full bg-[hsl(var(--secondary))]" />
         <div className="mx-auto h-3 w-52 animate-pulse rounded-full bg-[hsl(var(--secondary))]" />
@@ -138,13 +138,13 @@ function ClerkProviderWithRoutes() {
         signIn: {
           start: {
             title: 'Welcome back',
-            subtitle: 'Sign in to continue through Gatehouse',
+            subtitle: 'Sign in to continue to the Library',
           },
         },
         signUp: {
           start: {
             title: 'Create your account',
-            subtitle: 'Your private entry point starts here',
+            subtitle: 'Your private reading room starts here',
           },
         },
       }}

@@ -15,25 +15,25 @@ function AuthFrame({ children, mode }: { children: ReactNode; mode: 'sign-in' | 
               <span className="absolute top-[8px] h-[18px] w-[16px] rounded-t-[9px] border-[3px] border-[hsl(var(--card))] border-b-0" />
               <span className="h-[3px] w-[24px] rounded-full bg-[hsl(var(--accent))]" />
             </span>
-            <span className="font-extrabold tracking-[-0.04em] text-[hsl(var(--foreground))]">gatehouse</span>
+            <span className="font-serif text-xl font-semibold tracking-[-0.02em] text-[hsl(var(--foreground))]">The Library</span>
           </span>
         </Link>
         <Link href="/" className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="link-back-home">
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          Back to home
+          Back to library entrance
         </Link>
       </header>
       <div className="flex flex-1 items-center justify-center px-4 pb-12 pt-5 sm:pb-16">
         <div className="w-full max-w-[440px]">
           <div className="mb-7 text-center">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--accent-foreground))]">Gatehouse / {mode === 'sign-in' ? '01' : '02'}</p>
-            <h1 className="mt-3 text-2xl font-extrabold tracking-[-0.05em] text-[hsl(var(--foreground))]">{mode === 'sign-in' ? 'Welcome back.' : 'Make yourself at home.'}</h1>
-            <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{mode === 'sign-in' ? 'Your way through is ready.' : 'A private space is a few details away.'}</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--accent-foreground))]">The Library / {mode === 'sign-in' ? '01' : '02'}</p>
+            <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.03em] text-[hsl(var(--foreground))]">{mode === 'sign-in' ? 'Welcome back.' : 'Take a seat.'}</h1>
+            <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{mode === 'sign-in' ? 'Your shelf is waiting.' : 'A private reading room is a few details away.'}</p>
           </div>
           {children}
         </div>
       </div>
-      <p className="pb-6 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground)/.7)]">Private access, made clear.</p>
+      <p className="pb-6 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground)/.7)]">A quiet entrance to your collection.</p>
     </main>
   );
 }
