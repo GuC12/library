@@ -18,3 +18,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+VITE_AUTH_REDIRECT_URL = "https://6f0a68bd-4998-45ff-b105-d8b812c6eca2-00-1qh04l75czgx1.sisko.replit.dev/#"
