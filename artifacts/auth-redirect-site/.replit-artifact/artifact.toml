@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Auth Redirect Site"
+description = "A polished sign-in and registration website that securely authenticates users and redirects them to a configured destination site after successful access."
+version = "1.0.0"
+id = "artifacts/auth-redirect-site"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24247
+
+[services.development]
+run = "pnpm --filter @workspace/auth-redirect-site run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/auth-redirect-site", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/auth-redirect-site/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24247"
+BASE_PATH = "/"
