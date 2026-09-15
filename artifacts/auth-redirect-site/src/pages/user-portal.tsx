@@ -1,9 +1,7 @@
 import { useClerk, useUser } from '@clerk/react';
-import { BookOpen, Check, ExternalLink, LogOut } from 'lucide-react';
+import { BookOpen, Check, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'wouter';
-
-const redirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL;
 
 export function UserPortalPage() {
   const { user, isLoaded } = useUser();
@@ -40,14 +38,10 @@ export function UserPortalPage() {
           You are signed in as <span className="font-bold text-[hsl(var(--foreground))]">{user?.primaryEmailAddress?.emailAddress ?? user?.username ?? 'reader'}</span>. Choose whether to open the library site or stay here on the registration website.
         </p>
         <div className="mt-9 grid gap-3 sm:grid-cols-2">
-          {redirectUrl ? (
-            <a href={redirectUrl} className="group inline-flex items-center justify-center gap-3 rounded-full bg-[hsl(var(--primary))] px-5 py-3.5 text-sm font-bold text-[hsl(var(--primary-foreground))] shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="link-open-destination">
-              Open the library
-              <ExternalLink className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-            </a>
-          ) : (
-            <div className="rounded-2xl bg-[hsl(var(--secondary)/.55)] px-5 py-3.5 text-sm font-bold text-[hsl(var(--muted-foreground))]">Library link is not configured</div>
-          )}
+          <Link href="/library" className="group inline-flex items-center justify-center gap-3 rounded-full bg-[hsl(var(--primary))] px-5 py-3.5 text-sm font-bold text-[hsl(var(--primary-foreground))] shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="link-open-library">
+            Open the library
+            <BookOpen className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+          </Link>
           <button type="button" onClick={() => setStayed(true)} className="inline-flex items-center justify-center gap-3 rounded-full border border-[hsl(var(--border))] px-5 py-3.5 text-sm font-bold text-[hsl(var(--foreground))] transition-colors hover:bg-[hsl(var(--secondary)/.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="button-stay-here">
             Stay on this site
             {stayed ? <Check className="h-4 w-4 text-[hsl(var(--primary))]" aria-hidden="true" /> : null}

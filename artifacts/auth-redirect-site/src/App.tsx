@@ -10,6 +10,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { HomePage } from '@/pages/home';
 import { SignInPage, SignUpPage } from '@/pages/auth-pages';
 import { UserPortalPage } from '@/pages/user-portal';
+import { LibraryPage } from '@/pages/library';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -88,6 +89,12 @@ function UserPortalRoute() {
   return isSignedIn ? <UserPortalPage /> : <Redirect to="/" />;
 }
 
+function LibraryRoute() {
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return <AuthLoadingState />;
+  return isSignedIn ? <LibraryPage /> : <Redirect to="/" />;
+}
+
 function AuthLoadingState() {
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-[hsl(var(--background))] px-5">
@@ -159,6 +166,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/sign-in/*?" component={SignInPage} />
             <Route path="/sign-up/*?" component={SignUpPage} />
             <Route path="/user-portal" component={UserPortalRoute} />
+            <Route path="/library" component={LibraryRoute} />
             <Route component={NotFound} />
           </Switch>
         </RoutedErrorBoundary>
