@@ -7,6 +7,7 @@ import { Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wo
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { LanguageProvider, useLanguage } from '@/lib/i18n';
 import { HomePage } from '@/pages/home';
 import { SignInPage, SignUpPage } from '@/pages/auth-pages';
 import { UserPortalPage } from '@/pages/user-portal';
@@ -17,10 +18,6 @@ const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
-
-if (!clerkPubKey) {
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
-}
 
 function stripBase(path: string): string {
   return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
@@ -92,7 +89,7 @@ function UserPortalRoute() {
 function LibraryRoute() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <AuthLoadingState />;
-  return isSignedIn ? <LibraryPage /> : <Redirect to="/" />;
+  return isSignedIn ? <LibraryPage /> : <Redirect to="/sign-in" />;
 }
 
 function AuthLoadingState() {
@@ -133,25 +130,27 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
+  const { language, t } = useLanguage();
 
   return (
     <ClerkProvider
-      publishableKey={clerkPubKey}
+      publishableKey={clerkPubKey || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
       proxyUrl={clerkProxyUrl}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       localization={{
+        locale: language === 'kk' ? 'kk-KZ' : language === 'zh' ? 'zh-CN' : language === 'ru' ? 'ru-RU' : 'en-US',
         signIn: {
           start: {
-            title: 'Welcome back',
-            subtitle: 'Sign in to continue to the Library',
+            title: t('welcomeBack').replace('.', ''),
+            subtitle: t('welcomeBackCopy'),
           },
         },
         signUp: {
           start: {
-            title: 'Create your account',
-            subtitle: 'Your private reading room starts here',
+            title: t('register'),
+            subtitle: t('takeSeatCopy'),
           },
         },
       }}
@@ -162,7 +161,7 @@ function ClerkProviderWithRoutes() {
         <LogoutReset />
         <RoutedErrorBoundary>
           <Switch>
-            <Route path="/" component={HomeRedirect} />
+            <Route path="/" component={HomePage} />
             <Route path="/sign-in/*?" component={SignInPage} />
             <Route path="/sign-up/*?" component={SignUpPage} />
             <Route path="/user-portal" component={UserPortalRoute} />
@@ -175,12 +174,29 @@ function ClerkProviderWithRoutes() {
   );
 }
 
+function MissingClerkKeyNotice() {
+  return (
+    <main className="flex min-h-[100dvh] items-center justify-center bg-[hsl(var(--background))] px-5">
+      <p className="max-w-xl text-center text-base leading-relaxed text-[hsl(var(--foreground))]">
+        Не найден ключ Clerk. Создайте файл .env в папке artifacts/auth-redirect-site и добавьте туда
+        VITE_CLERK_PUBLISHABLE_KEY=ваш_ключ
+      </p>
+    </main>
+  );
+}
+
 function App() {
+  if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) {
+    return <MissingClerkKeyNotice />;
+  }
+
   return (
     <TooltipProvider>
-      <WouterRouter base={basePath}>
-        <ClerkProviderWithRoutes />
-      </WouterRouter>
+      <LanguageProvider>
+        <WouterRouter base={basePath}>
+          <ClerkProviderWithRoutes />
+        </WouterRouter>
+      </LanguageProvider>
       <Toaster />
     </TooltipProvider>
   );

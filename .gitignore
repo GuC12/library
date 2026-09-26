@@ -26,6 +26,7 @@ node_modules
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+.vs/
 
 # misc
 /.sass-cache
@@ -47,3 +48,13 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+# Local scripts and credential files
+**/check-supabase.mjs
+# Imported previews and local browser data
+attached_assets/
+

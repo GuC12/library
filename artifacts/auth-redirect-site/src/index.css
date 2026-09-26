@@ -186,6 +186,46 @@
 .cl-socialButtonsBlockButton:hover { background: hsl(40.7 24.6% 86%); }
 .cl-formButtonPrimary:hover { filter: brightness(0.94); }
 
+.language-switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: hsl(var(--foreground));
+}
+
+.language-switcher select {
+  appearance: none;
+  min-width: 92px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  padding: 8px 27px 8px 12px;
+  outline: none;
+  background: hsl(var(--card) / .78);
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.language-switcher select:focus-visible {
+  border-color: hsl(var(--accent));
+  box-shadow: 0 0 0 3px hsl(var(--accent) / .22);
+}
+
+.language-switcher svg {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  html, body, #root { min-width: 0; width: 100%; overflow-x: hidden; }
+  button, a, input, select, textarea { max-width: 100%; }
+  input, select, textarea { font-size: 16px; }
+  .cl-cardBox { width: calc(100vw - 32px) !important; max-width: calc(100vw - 32px) !important; }
+  .cl-rootBox { width: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
