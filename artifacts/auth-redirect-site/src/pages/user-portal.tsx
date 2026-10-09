@@ -57,7 +57,7 @@ export function UserPortalPage() {
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2200);
     } else {
-      setErrorMessage(res.error === 'nicknameTaken' ? t('nicknameTaken') : 'Не удалось сохранить аватарку');
+      setErrorMessage(res.error === 'nicknameTaken' ? t('nicknameTaken') : t('avatarSaveError'));
       setTimeout(() => setErrorMessage(''), 3500);
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -81,7 +81,7 @@ export function UserPortalPage() {
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2200);
     } else {
-      setErrorMessage(res.error === 'nicknameTaken' ? t('nicknameTaken') : 'Не удалось сохранить никнейм');
+      setErrorMessage(res.error === 'nicknameTaken' ? t('nicknameTaken') : t('profileSaveError'));
       setTimeout(() => setErrorMessage(''), 3500);
     }
   };

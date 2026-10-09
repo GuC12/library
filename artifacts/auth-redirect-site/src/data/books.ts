@@ -11,6 +11,7 @@ export type Book = {
   title: string;
   author: string;
   category: string;
+  communityCategory?: string;
   price: number;
   spine: string;
   summary: string;
@@ -25,8 +26,10 @@ export type Book = {
 };
 
 import { SPECIAL_BOOK } from './special-book';
+import { MISS_SHOPAHOLIC_BOOK } from './miss-shopaholic-book';
 
 export const books: Book[] = [
+  MISS_SHOPAHOLIC_BOOK,
   SPECIAL_BOOK,
   {
     id: 1,

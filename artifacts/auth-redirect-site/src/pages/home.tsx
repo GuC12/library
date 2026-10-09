@@ -5,6 +5,8 @@ import { LanguageSwitcher } from '@/components/language-switcher';
 import { useLanguage } from '@/lib/i18n';
 import { DEFAULT_AVATAR, useUserProfile } from '@/lib/user-profile';
 import { Interactive3DBook } from '@/components/interactive-3d-book';
+import { SPECIAL_BOOK } from '@/data/special-book';
+import { MISS_SHOPAHOLIC_BOOK } from '@/data/miss-shopaholic-book';
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -33,7 +35,7 @@ export function HomePage() {
         <Link href="/" className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="link-home-brand">
           <GateMark />
         </Link>
-        <nav className="flex items-center gap-2 sm:gap-3" aria-label="Account navigation">
+        <nav className="flex items-center gap-2 sm:gap-3" aria-label={t('accountNavigation')}>
           <span className="hidden text-xs font-medium text-[hsl(var(--muted-foreground))] md:inline">{t('quietPlace')}</span>
           <LanguageSwitcher />
 
@@ -118,37 +120,42 @@ export function HomePage() {
           </div>
         </div>
 
-        <div className="relative mx-auto w-full max-w-[540px] lg:mr-0 flex flex-col items-center">
-          <div className="absolute -inset-5 rounded-[3rem] bg-[hsl(var(--accent)/.12)] blur-2xl" aria-hidden="true" />
-          <div className="gate-grid animate-rise-in animate-rise-in-delay-2 relative w-full overflow-hidden rounded-[2.5rem] bg-[hsl(var(--sidebar))] p-5 shadow-[0_26px_70px_hsl(33.5_37.8%_17.6%/.24)] sm:p-7 flex flex-col items-center">
-            <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full border border-[hsl(var(--accent)/.26)] pointer-events-none" aria-hidden="true" />
-            <div className="absolute -right-4 -top-4 h-32 w-32 rounded-full border border-[hsl(var(--accent)/.16)] pointer-events-none" aria-hidden="true" />
-            <div className="w-full flex items-center justify-between mb-2 z-10">
-              <GateMark compact />
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[hsl(var(--sidebar-foreground)/.75)] bg-[hsl(var(--accent)/.15)] px-2.5 py-1 rounded-full border border-[hsl(var(--accent)/.3)]">
-                👑 Особенная книга
-              </span>
-            </div>
-
-            {/* 3D Книга */}
-            <div className="w-full py-4 flex justify-center">
-              <Interactive3DBook />
-            </div>
-
-            <div className="w-full mt-2 pt-4 border-t border-[hsl(var(--sidebar-foreground)/.15)] flex items-end justify-between z-10">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--sidebar-foreground)/.53)]">
-                  Изабель Вальмонт
+        <div className="relative mx-auto w-full max-w-[620px] lg:mr-0">
+          <div className="animate-rise-in animate-rise-in-delay-2 grid grid-cols-2 gap-3 text-center sm:gap-5">
+            {[SPECIAL_BOOK, MISS_SHOPAHOLIC_BOOK].map((book, index) => (
+              <article
+                key={book.id}
+                className="relative flex min-w-0 flex-col items-center overflow-hidden rounded-[26px] border border-[hsl(var(--border)/.75)] bg-[hsl(var(--card)/.58)] px-2 pb-3 pt-4 shadow-[0_18px_55px_hsl(var(--foreground)/.07)] backdrop-blur-sm sm:px-4 sm:pt-5"
+              >
+                <div
+                  className={`pointer-events-none absolute -top-3 h-28 w-28 rounded-full blur-3xl ${index === 0 ? 'bg-[hsl(33_48%_50%/.2)]' : 'bg-[hsl(8_70%_66%/.22)]'}`}
+                  aria-hidden="true"
+                />
+                <h2 className="relative z-10 line-clamp-2 min-h-[2.7rem] max-w-[15rem] font-serif text-base font-semibold leading-tight tracking-[-0.03em] text-[hsl(var(--foreground))] sm:min-h-[3.5rem] sm:text-xl">
+                  {book.title}
+                </h2>
+                <p className="relative z-10 mt-1 min-h-4 truncate font-mono text-[9px] text-[hsl(var(--muted-foreground))] sm:text-[10px]">
+                  {book.author}
                 </p>
-                <p className="mt-0.5 text-xs font-bold text-[hsl(var(--sidebar-foreground))]">
-                  «Письма которые не должны были дойти»
+                <div className="relative z-10 mt-1 flex min-h-[230px] w-full items-center justify-center sm:min-h-[250px]">
+                  <div
+                    className={`pointer-events-none absolute bottom-7 h-12 w-32 rounded-[50%] blur-2xl ${index === 0 ? 'bg-[hsl(33_48%_50%/.22)]' : 'bg-[hsl(8_70%_66%/.2)]'}`}
+                    aria-hidden="true"
+                  />
+                  <Interactive3DBook
+                    book={book}
+                    compact
+                    className="relative z-10 scale-[.88] sm:scale-100"
+                    showDetailsButton={false}
+                    showControls={false}
+                    initialRotation={{ x: 5, y: index === 0 ? -20 : 18 }}
+                  />
+                </div>
+                <p className="relative z-10 mt-1 font-serif text-[11px] italic text-[hsl(var(--muted-foreground))] sm:text-xs">
+                  {t('recommendedReading')}
                 </p>
-              </div>
-              <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-[hsl(var(--accent))]">
-                <span className="h-2 w-2 rounded-full bg-[hsl(var(--accent))] animate-pulse" />
-                3 000 ₸
-              </div>
-            </div>
+              </article>
+            ))}
           </div>
         </div>
       </section>

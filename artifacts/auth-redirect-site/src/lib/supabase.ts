@@ -21,6 +21,7 @@ export interface CommunityBookRow {
   author_avatar?: string | null;
   owner_id?: string | null;
   category: string;
+  community_category?: string | null;
   language?: string | null;
   price: number;
   spine: string;
@@ -44,6 +45,7 @@ export function rowToBook(row: CommunityBookRow): Book {
     authorAvatar: row.author_avatar || undefined,
     ownerId: row.owner_id || undefined,
     category: row.category,
+    communityCategory: row.community_category || undefined,
     language: (row.language as Book['language']) || 'ru',
     price: Number(row.price || 0),
     spine: row.spine || '#8C704B',
@@ -63,6 +65,7 @@ export function bookToRow(book: Book): CommunityBookRow {
     author_avatar: book.authorAvatar || null,
     owner_id: book.ownerId || null,
     category: book.category,
+    community_category: book.communityCategory || null,
     language: book.language || 'ru',
     price: book.price || 0,
     spine: book.spine || '#8C704B',

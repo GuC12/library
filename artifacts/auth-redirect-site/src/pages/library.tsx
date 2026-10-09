@@ -71,6 +71,22 @@ import {
 } from '@/lib/supabase';
 import './library.css';
 
+const COMMUNITY_SUBCATEGORIES = [
+  { id: 'fiction', key: 'communitySubFiction' },
+  { id: 'poetry', key: 'communitySubPoetry' },
+  { id: 'fantasy', key: 'communitySubFantasy' },
+  { id: 'mystery', key: 'communitySubMystery' },
+  { id: 'romance', key: 'communitySubRomance' },
+  { id: 'scifi', key: 'communitySubScifi' },
+  { id: 'memoir', key: 'communitySubMemoir' },
+  { id: 'self-help', key: 'communitySubSelfHelp' },
+  { id: 'education', key: 'communitySubEducation' },
+  { id: 'business', key: 'communitySubBusiness' },
+  { id: 'technology', key: 'communitySubTechnology' },
+  { id: 'children', key: 'communitySubChildren' },
+  { id: 'other', key: 'communitySubOther' },
+] as const;
+
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 const PAGE_TURN_MS = 780;
 
@@ -90,10 +106,13 @@ type FlyingBook = {
   targetY: number;
 };
 
-export const READY_COVERS = [
+type CoverTranslationKey = 'coverVintageLeather' | 'coverDarkEmerald' | 'coverRoyalNavy' | 'coverBurgundyWine' | 'coverGoldenAmber' | 'coverObsidianNight';
+
+export const READY_COVERS: Array<{ id: string; translationKey: CoverTranslationKey; name: string; gradient: string; spine: string; pattern: string; border: string }> = [
   {
     id: 'cover-vintage-leather',
-    name: 'Кожаный переплет',
+    translationKey: 'coverVintageLeather' as const,
+    name: 'Кожаный переплёт',
     gradient: 'linear-gradient(145deg, #2D1B0F 0%, #4A3320 50%, #6E4A2A 100%)',
     spine: '#2D1B0F',
     pattern: 'radial-gradient(circle at 50% 30%, rgba(217, 199, 170, 0.15) 0%, transparent 70%)',
@@ -101,6 +120,7 @@ export const READY_COVERS = [
   },
   {
     id: 'cover-dark-emerald',
+    translationKey: 'coverDarkEmerald' as const,
     name: 'Изумрудный бархат',
     gradient: 'linear-gradient(145deg, #0F2D20 0%, #1D4A38 50%, #2E6B52 100%)',
     spine: '#0F2D20',
@@ -109,6 +129,7 @@ export const READY_COVERS = [
   },
   {
     id: 'cover-royal-navy',
+    translationKey: 'coverRoyalNavy' as const,
     name: 'Морская глубина',
     gradient: 'linear-gradient(145deg, #0C1E36 0%, #1A3456 50%, #294D7B 100%)',
     spine: '#0C1E36',
@@ -117,7 +138,8 @@ export const READY_COVERS = [
   },
   {
     id: 'cover-burgundy-wine',
-    name: 'Винный бордо',
+    translationKey: 'coverBurgundyWine' as const,
+    name: 'Бордовое вино',
     gradient: 'linear-gradient(145deg, #380C14 0%, #561823 50%, #7D2636 100%)',
     spine: '#380C14',
     pattern: 'radial-gradient(circle at 50% 30%, rgba(255, 200, 210, 0.15) 0%, transparent 70%)',
@@ -125,7 +147,8 @@ export const READY_COVERS = [
   },
   {
     id: 'cover-golden-amber',
-    name: 'Золотой янтарь',
+    translationKey: 'coverGoldenAmber' as const,
+    name: 'Золотистый янтарь',
     gradient: 'linear-gradient(145deg, #4A330B 0%, #755219 50%, #A6762B 100%)',
     spine: '#4A330B',
     pattern: 'radial-gradient(circle at 50% 40%, rgba(255, 235, 180, 0.18) 0%, transparent 65%)',
@@ -133,7 +156,8 @@ export const READY_COVERS = [
   },
   {
     id: 'cover-obsidian-night',
-    name: 'Черный обсидиан',
+    translationKey: 'coverObsidianNight' as const,
+    name: 'Чёрный обсидиан',
     gradient: 'linear-gradient(145deg, #121214 0%, #212226 50%, #35373E 100%)',
     spine: '#121214',
     pattern: 'radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.09) 0%, transparent 70%)',
@@ -198,8 +222,9 @@ function PageSheet({
   );
 }
 
-function BookCover({ book, small = false }: { book: Book; small?: boolean }) {
-  if (book.id === 100) {
+function BookCover({ book, small = false, categoryLabels }: { book: Book; small?: boolean; categoryLabels: Record<string, string> }) {
+  const translatedCategory = categoryLabels[book.category] || book.category;
+  if (book.id === 100 || book.id === 1000) {
     return (
       <div
         className={`library-book-cover ${small ? 'library-book-cover-small' : ''} library-custom-cover overflow-hidden`}
@@ -210,12 +235,7 @@ function BookCover({ book, small = false }: { book: Book; small?: boolean }) {
           backgroundPosition: 'center',
           boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
         } as CSSProperties}
-      >
-        <div className="absolute top-2 right-2 rounded-full bg-gradient-to-r from-amber-600 via-rose-700 to-amber-700 px-2 py-0.5 text-[9px] font-black text-amber-100 shadow-md border border-amber-300/40 z-20 flex items-center gap-1 tracking-wider uppercase pointer-events-none">
-          <span>👑</span>
-          <span>Особенная книга</span>
-        </div>
-      </div>
+      />
     );
   }
 
@@ -233,7 +253,7 @@ function BookCover({ book, small = false }: { book: Book; small?: boolean }) {
         } as CSSProperties}
       >
         <div className="library-custom-cover-overlay library-ready-cover-overlay" style={{ borderColor: readyCoverTemplate.border }}>
-          <span className="library-cover-category">{book.category}</span>
+          <span className="library-cover-category">{translatedCategory}</span>
           <strong>{book.title}</strong>
           <span className="library-cover-author">{book.author}</span>
         </div>
@@ -251,7 +271,7 @@ function BookCover({ book, small = false }: { book: Book; small?: boolean }) {
         } as CSSProperties}
       >
         <div className="library-custom-cover-overlay">
-          <span className="library-cover-category">{book.category}</span>
+          <span className="library-cover-category">{translatedCategory}</span>
           <strong>{book.title}</strong>
           <span className="library-cover-author">{book.author}</span>
         </div>
@@ -261,7 +281,7 @@ function BookCover({ book, small = false }: { book: Book; small?: boolean }) {
 
   return (
     <div className={`library-book-cover ${small ? 'library-book-cover-small' : ''}`} style={{ '--spine-color': book.spine } as CSSProperties}>
-      <span className="library-cover-category">{book.category}</span>
+      <span className="library-cover-category">{translatedCategory}</span>
       <strong>{book.title}</strong>
       <span className="library-cover-author">{book.author}</span>
     </div>
@@ -297,6 +317,8 @@ export function LibraryPage() {
   const [turningTo, setTurningTo] = useState<number | null>(null);
   const turnTimer = useRef<number | null>(null);
   const [cart, setCart] = useState<number[]>(() => readStorage<number[]>('library-cart', []));
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [orderSubmitted, setOrderSubmitted] = useState(false);
   const [bookmarks, setBookmarks] = useState<Record<string, BookmarkEntry>>(() => readStorage<Record<string, BookmarkEntry>>('library-bookmarks', {}));
   const [bookLikes, setBookLikes] = useState<Record<number, number>>({});
   const [likedBooks, setLikedBooks] = useState<number[]>([]);
@@ -365,7 +387,8 @@ export function LibraryPage() {
     if (book.ownerId !== user?.id) return;
     setEditingBookId(book.id);
     setNewTitle(book.title);
-    setNewCategory(book.category);
+    setNewCategory('Пользовательские книги');
+    setNewCommunityCategory(book.communityCategory || 'other');
     setNewLanguage(book.language || 'ru');
     setNewSummary(book.summary);
     setNewPrice(String(book.price));
@@ -402,8 +425,9 @@ export function LibraryPage() {
     return () => window.removeEventListener('library-stats-changed', handleStatsChange);
   }, []);
 
-  // Подкатегории по языкам
+  // Подкатегории по языкам и тематике книг сообщества.
   const [subLang, setSubLang] = useState<'all' | 'ru' | 'en' | 'kk' | 'zh'>('all');
+  const [communitySubcategory, setCommunitySubcategory] = useState('all');
 
   // Пользовательские книги (синхронизируются с облачной базой Supabase в реальном времени)
   const [userBooks, setUserBooks] = useState<Book[]>(() => {
@@ -482,22 +506,31 @@ export function LibraryPage() {
   }, []);
 
   const allBooks = useMemo(() => {
-    const list = [...userBooks, ...books];
-    const special = list.find((b) => b.id === 100);
-    const rest = list.filter((b) => b.id !== 100);
-    return special ? [special, ...rest] : list;
+    const featuredBook = books[0];
+    const featuredTitle = featuredBook.title.trim().toLocaleLowerCase();
+    const otherUserBooks = userBooks.filter((book) => book.title.trim().toLocaleLowerCase() !== featuredTitle);
+    return [featuredBook, ...otherUserBooks, ...books.slice(1)];
   }, [userBooks]);
   const categoryLabels: Record<string, string> = {
-    all: t('all'),
-    'Мои книги': t('myBooks'),
-    'Топ книг': t('topBooks'),
-    'Пользовательские книги': t('userBooks'),
-    'Художественная литература': t('fiction'),
+    'Пользовательские книги': t('categoryCommunity'),
+    'Художественная литература': t('categoryFiction'),
     Основы: t('categoryBasics'),
     Архитектура: t('categoryArchitecture'),
     Алгоритмы: t('categoryAlgorithms'),
     Практика: t('categoryPractice'),
     Языки: t('categoryLanguages'),
+    [t('all')]: t('all'),
+    [t('myBooks')]: t('myBooks'),
+    [t('topBooks')]: t('topBooks'),
+    [t('userBooks')]: t('userBooks'),
+    [t('fiction')]: t('fiction'),
+    [t('categoryCommunity')]: t('categoryCommunity'),
+    [t('categoryFiction')]: t('categoryFiction'),
+    [t('categoryBasics')]: t('categoryBasics'),
+    [t('categoryArchitecture')]: t('categoryArchitecture'),
+    [t('categoryAlgorithms')]: t('categoryAlgorithms'),
+    [t('categoryPractice')]: t('categoryPractice'),
+    [t('categoryLanguages')]: t('categoryLanguages'),
   };
   const ownBooks = useMemo(() => userBooks.filter((book) => book.ownerId === user?.id), [userBooks, user?.id]);
 
@@ -607,7 +640,7 @@ export function LibraryPage() {
     if (!(await toggleBookLike(book.id, user.id, liked))) {
       setLikedBooks((current) => liked ? current.filter((id) => id !== book.id) : [...current, book.id]);
       setBookLikes((current) => ({ ...current, [book.id]: Math.max(0, (current[book.id] || 0) + (liked ? -1 : 1)) }));
-      setNotice('Не удалось сохранить лайк. Попробуйте ещё раз.');
+      setNotice(t('likeSaveError'));
       window.setTimeout(() => setNotice(''), 3500);
     }
   };
@@ -627,16 +660,17 @@ export function LibraryPage() {
   // Форма добавления и редактирования книги
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Пользовательские книги');
-  const [newLanguage, setNewLanguage] = useState<'ru' | 'en' | 'kk' | 'zh'>('ru');
+  const [newCommunityCategory, setNewCommunityCategory] = useState('other');
+  const [newLanguage, setNewLanguage] = useState<'ru' | 'en' | 'kk' | 'zh'>(language === 'zh' ? 'zh' : language);
   const [newSummary, setNewSummary] = useState('');
   const [newPrice, setNewPrice] = useState('0');
   const [newSpine, setNewSpine] = useState('#8C704B');
   const [newCover, setNewCover] = useState('');
   const [coverType, setCoverType] = useState<'ready' | 'custom'>('ready');
   const [selectedReadyCoverId, setSelectedReadyCoverId] = useState(READY_COVERS[0].id);
-  const [newPages, setNewPages] = useState<BookPage[]>([
-    { kicker: 'Глава 1', title: 'Начало', text: 'Текст первой главы книги. Читатели смогут открыть её и листать в 3D ридере.' },
-    { kicker: 'Глава 2', title: 'Продолжение', text: 'Текст второй главы книги. Поделитесь своими знаниями или историей.' },
+  const [newPages, setNewPages] = useState<BookPage[]>(() => [
+    { kicker: t('defaultPage1Kicker'), title: t('defaultPage1Title'), text: t('defaultPage1Text') },
+    { kicker: t('defaultPage2Kicker'), title: t('defaultPage2Title'), text: t('defaultPage2Text') },
   ]);
   const coverFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -649,15 +683,17 @@ export function LibraryPage() {
     setInputNickname(nickname);
   }, [nickname]);
 
+  const isCommunityCategory = (book: Book) => book.isUserBook || book.category === 'Пользовательские книги';
+
   const categories = useMemo(() => {
-    const fixed = ['all', 'Мои книги', 'Топ книг', 'Пользовательские книги', 'Художественная литература'];
-    const rest = [...new Set(allBooks.map((b) => b.category))].filter((c) => !fixed.includes(c));
+    const fixed = [t('all'), t('myBooks'), t('topBooks'), t('userBooks'), t('fiction')];
+    const rest = [...new Set(allBooks.map((book) => categoryLabels[book.category] || book.category))].filter((label) => !fixed.includes(label));
     return [...fixed, ...rest];
-  }, [allBooks]);
+  }, [allBooks, t]);
 
   const filteredBooks = useMemo(() => {
     const normalized = query.toLowerCase().trim();
-    const sortedBooks = category === 'Топ книг'
+    const sortedBooks = category === t('topBooks')
       ? [...allBooks].sort((a, b) => (bookLikes[b.id] || 0) - (bookLikes[a.id] || 0))
       : allBooks;
     const result = sortedBooks.filter((book) => {
@@ -665,20 +701,27 @@ export function LibraryPage() {
       if (!matchesQuery) return false;
 
       // Фильтрация по основной категории
-      if (category !== 'all') {
-        if (category === 'Мои книги') {
+      // Начальное значение категории — внутренний ключ `all`, а кнопка
+      // категории использует локализованный текст из переводов.
+      if (category !== 'all' && category !== t('all')) {
+        if (category === t('myBooks')) {
           if (book.ownerId !== user?.id) return false;
-        } else if (category === 'Топ книг') {
+        } else if (category === t('topBooks')) {
           // В разделе топа показываем все книги, отсортированные по числу лайков ниже.
           // Книги без лайков остаются в конце списка.
           if (!allBooks.some((item) => item.id === book.id)) return false;
-        } else if (category === 'Пользовательские книги') {
-          if (!book.isUserBook && book.category !== 'Пользовательские книги') return false;
-        } else if (category === 'Художественная литература') {
+        } else if (category === t('userBooks')) {
+          if (!isCommunityCategory(book)) return false;
+        } else if (category === t('fiction')) {
           if (book.category !== 'Художественная литература') return false;
-        } else if (book.category !== category) {
+        } else if ((categoryLabels[book.category] || book.category) !== category) {
           return false;
         }
+      }
+
+      if (category === t('userBooks') && communitySubcategory !== 'all' && isCommunityCategory(book)) {
+        const selectedCommunityCategory = book.communityCategory || 'other';
+        if (selectedCommunityCategory !== communitySubcategory) return false;
       }
 
       // Подкатегория по языку написания
@@ -690,13 +733,10 @@ export function LibraryPage() {
       return true;
     });
 
-    // Особенная книга (ID: 100) всегда на первом месте
-    const special = result.find((b) => b.id === 100);
-    if (special) {
-      return [special, ...result.filter((b) => b.id !== 100)];
-    }
-    return result;
-  }, [allBooks, bookLikes, category, query, subLang, user?.id]);
+    // Keep the featured special edition at the front of the catalog.
+    const special = result.find((book) => book.id === 100);
+    return special ? [special, ...result.filter((book) => book.id !== 100)] : result;
+  }, [allBooks, bookLikes, category, communitySubcategory, query, subLang, t, user?.id]);
 
   useEffect(() => {
     window.localStorage.setItem('library-cart', JSON.stringify(cart));
@@ -829,13 +869,36 @@ export function LibraryPage() {
   const handleAddPage = () => {
     setNewPages((prev) => [
       ...prev,
-      { kicker: `Глава ${prev.length + 1}`, title: `Глава ${prev.length + 1}`, text: 'Текст главы...' },
+      { kicker: `${t('pageKickerPrefix')} ${prev.length + 1}`, title: `${t('pageKickerPrefix')} ${prev.length + 1}`, text: t('pageTextPlaceholder') },
     ]);
   };
 
   const handleUpdatePage = (index: number, field: keyof BookPage, value: string) => {
     setNewPages((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
   };
+
+  const detectBookLanguage = (title: string, summary: string, pages: BookPage[]) => {
+    const sample = [title, summary, ...pages.flatMap((page) => [page.title, page.text])].join(' ');
+    const counts = { ru: 0, en: 0, kk: 0, zh: 0 };
+    for (const char of sample) {
+      if (/[әғқңөұүһі]/i.test(char)) counts.kk += 3;
+      else if (/[а-яё]/i.test(char)) counts.ru += 1;
+      else if (/\p{Script=Han}/u.test(char)) counts.zh += 1;
+      else if (/[a-z]/i.test(char)) counts.en += 1;
+    }
+    const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const winner = ranked[0];
+    const runnerUp = ranked[1];
+    if (!winner || winner[1] < 8 || (runnerUp && winner[1] < runnerUp[1] * 1.2)) return null;
+    return winner[0] as 'ru' | 'en' | 'kk' | 'zh';
+  };
+
+  const detectedBookLanguage = detectBookLanguage(newTitle, newSummary, newPages);
+  const effectiveBookLanguage = detectedBookLanguage || newLanguage;
+
+  useEffect(() => {
+    if (detectedBookLanguage) setNewLanguage(detectedBookLanguage);
+  }, [detectedBookLanguage]);
 
   const handleRemovePage = (index: number) => {
     if (newPages.length <= 1) return;
@@ -845,7 +908,7 @@ export function LibraryPage() {
   const handleCreateBook = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newSummary.trim()) {
-      setNotice('Укажите название и описание книги');
+      setNotice(t('needTitleSummary'));
       setTimeout(() => setNotice(''), 2500);
       return;
     }
@@ -859,14 +922,15 @@ export function LibraryPage() {
       author: nickname,
       authorAvatar: avatar || DEFAULT_AVATAR,
       ownerId: user?.id,
-      category: newCategory,
-      language: newLanguage,
+      category: 'Пользовательские книги',
+      communityCategory: newCommunityCategory,
+      language: effectiveBookLanguage,
       price: Math.max(0, parseInt(newPrice, 10) || 0),
-      spine: selectedTemplate ? selectedTemplate.spine : (newSpine || '#8C704B'),
+      spine: selectedTemplate ? selectedTemplate.spine : (coverType === 'custom' ? 'transparent' : (newSpine || '#8C704B')),
       summary: newSummary.trim(),
       coverImage: finalCover,
       pages: newPages.length > 0 ? newPages : [
-        { kicker: 'Глава 1', title: newTitle.trim(), text: newSummary.trim() }
+        { kicker: `${t('pageKickerPrefix')} 1`, title: newTitle.trim(), text: newSummary.trim() }
       ],
       isUserBook: true,
     };
@@ -891,14 +955,21 @@ export function LibraryPage() {
 
     setUploadModalOpen(false);
     setEditingBookId(null);
-    setCategory('Пользовательские книги');
+    setCommunitySubcategory('all');
+    setSubLang('all');
+    setCategory(t('userBooks'));
     setNotice(t('bookPublished'));
     setTimeout(() => setNotice(''), 2500);
 
     setNewTitle('');
+    setNewCategory('Пользовательские книги');
+    setNewCommunityCategory('other');
     setNewSummary('');
     setNewCover('');
-    setNewPages([{ kicker: 'Глава 1', title: 'Начало', text: 'Текст первой главы книги.' }, { kicker: 'Глава 2', title: 'Продолжение', text: 'Текст второй главы книги.' }]);
+    setNewPages([
+      { kicker: t('defaultPage1Kicker'), title: t('defaultPage1Title'), text: t('defaultPage1Text') },
+      { kicker: t('defaultPage2Kicker'), title: t('defaultPage2Title'), text: t('defaultPage2Text') },
+    ]);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -909,7 +980,7 @@ export function LibraryPage() {
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2200);
     } else {
-      setNotice(res.error === 'nicknameTaken' ? t('nicknameTaken') : 'Не удалось сохранить аватарку');
+      setNotice(res.error === 'nicknameTaken' ? t('nicknameTaken') : t('avatarSaveError'));
       setTimeout(() => setNotice(''), 3000);
     }
     if (avatarFileRef.current) avatarFileRef.current.value = '';
@@ -931,7 +1002,7 @@ export function LibraryPage() {
       setProfileSaved(true);
       window.setTimeout(() => setProfileSaved(false), 2200);
     } else {
-      setNotice(res.error === 'nicknameTaken' ? t('nicknameTaken') : 'Не удалось сохранить профиль');
+      setNotice(res.error === 'nicknameTaken' ? t('nicknameTaken') : t('profileSaveError'));
       window.setTimeout(() => setNotice(''), 2500);
     }
   };
@@ -963,13 +1034,25 @@ export function LibraryPage() {
 
   const cartBooks = allBooks.filter((book) => cart.includes(book.id));
   const total = cartBooks.reduce((sum, book) => sum + book.price, 0);
+  const closeCart = () => {
+    setCartOpen(false);
+    setCheckoutOpen(false);
+    setOrderSubmitted(false);
+  };
+  const submitOrder = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!cartBooks.length) return;
+    setCart([]);
+    setCheckoutOpen(false);
+    setOrderSubmitted(true);
+  };
   const currentPages = selectedBook?.pages.slice(pageIndex, pageIndex + 2) ?? [];
   const incomingPages = selectedBook && turningTo !== null ? selectedBook.pages.slice(turningTo, turningTo + 2) : [];
   const leftPage = isTurning && turnDirection === 'previous' ? incomingPages[0] : currentPages[0];
   const rightPage = isTurning && turnDirection === 'next' ? incomingPages[1] : currentPages[1];
   const leftNumber = (isTurning && turnDirection === 'previous' && turningTo !== null ? turningTo : pageIndex) + 1;
   const rightNumber = (isTurning && turnDirection === 'next' && turningTo !== null ? turningTo : pageIndex) + 2;
-  const email = user?.primaryEmailAddress?.emailAddress ?? user?.username ?? 'читатель';
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.username ?? t('reader');
 
   return (
     <div className="library-app">
@@ -982,7 +1065,7 @@ export function LibraryPage() {
           <Search size={18} aria-hidden="true" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchPlaceholder')} aria-label={t('searchAria')} />
         </label>
-        <nav className="library-nav" aria-label="Навигация библиотеки">
+        <nav className="library-nav" aria-label={t('libraryNavigation')}>
           <button type="button" onClick={() => setLeaderboardOpen(true)} className="library-nav-leaderboard-btn" title={t('leaderboard')}>
             <Trophy size={15} /> {t('leaderboard')}
           </button>
@@ -997,7 +1080,7 @@ export function LibraryPage() {
             ref={cartButtonRef}
             type="button"
             className={`library-nav-cart-btn ${cartBumping ? 'is-bumping' : ''}`}
-            onClick={() => setCartOpen(true)}
+            onClick={() => { setOrderSubmitted(false); setCartOpen(true); }}
           >
             <ShoppingCart size={15} /> {t('cart')} <span>{cart.length}</span>
           </button>
@@ -1078,15 +1161,34 @@ export function LibraryPage() {
             </div>
             <span className="library-count">{filteredBooks.length} {t('foundOf')} {allBooks.length}</span>
           </div>
-          <div className="library-filters" role="tablist" aria-label="Категории книг">
-            {categories.map((item) => (
-              <button key={item} type="button" className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{categoryLabels[item] || item}</button>
-            ))}
+          <div className="library-filters" role="tablist" aria-label={t('bookCategories')}>
+            {categories.map((item) => {
+              const isActive = category === item || (category === 'all' && item === t('all'));
+              return (
+                <button key={item} type="button" role="tab" aria-selected={isActive} className={isActive ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>
+              );
+            })}
           </div>
 
-          {/* Подкатегории по языку написания книги */}
-          <div className="library-subcategories" aria-label="Язык книги">
-            <span className="library-subcategory-label">Язык:</span>
+          {category === t('userBooks') && (
+            <div className="library-subcategories" aria-label={t('communityCategories')}>
+              <span className="library-subcategory-label">{t('communityCategories')}:</span>
+              <div className="library-subcategory-pills">
+                <button type="button" className={`library-subpill ${communitySubcategory === 'all' ? 'is-active' : ''}`} onClick={() => setCommunitySubcategory('all')}>
+                  {t('allCommunityCategories')}
+                </button>
+                {COMMUNITY_SUBCATEGORIES.map((subcategory) => (
+                  <button key={subcategory.id} type="button" className={`library-subpill ${communitySubcategory === subcategory.id ? 'is-active' : ''}`} onClick={() => setCommunitySubcategory(subcategory.id)}>
+                    {t(subcategory.key)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Filter by the language a book is written in. */}
+          <div className="library-subcategories" aria-label={t('bookLanguage')}>
+            <span className="library-subcategory-label">{t('bookLanguage')}:</span>
             <div className="library-subcategory-pills">
               <button
                 type="button"
@@ -1129,11 +1231,12 @@ export function LibraryPage() {
           {filteredBooks.length ? (
             <div className="library-book-grid">
               {filteredBooks.map((book) => (
-                <article className={`library-book-card ${book.id === 100 ? 'library-book-card-special' : ''}`} key={book.id}>
-                  {book.id === 100 ? (
+                <article className={`library-book-card ${book.id === 100 || book.id === 1000 ? 'library-book-card-special' : ''}`} key={book.id}>
+                  {book.id === 100 || book.id === 1000 ? (
                     <div className="library-card-3d-stage flex flex-col items-center justify-center relative min-h-[290px] pt-1">
                       <Interactive3DBook
                         compact={true}
+                        book={book}
                         showDetailsButton={false}
                         showControls={false}
                         onOpenReader={() => openReader(book)}
@@ -1146,7 +1249,7 @@ export function LibraryPage() {
                       onClick={() => openReader(book)}
                       aria-label={`${t('openBook')} «${book.title}»`}
                     >
-                      <BookCover book={book} />
+                      <BookCover book={book} categoryLabels={categoryLabels} />
                     </button>
                   )}
                   <div className="library-card-title-row">
@@ -1165,11 +1268,6 @@ export function LibraryPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <strong>{book.price === 0 ? t('free') : `${book.price} ₸`}</strong>
-                    {book.id === 100 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-[#B1844D] shadow-sm">
-                        👑 Особенная книга
-                      </span>
-                    )}
                   </div>
                   <div className="library-card-actions">
                     <button type="button" className="library-primary-button" onClick={() => openReader(book)}>
@@ -1241,15 +1339,8 @@ export function LibraryPage() {
             </div>
             {readerTab === 'summary' ? (
               <div className="library-summary">
-                <BookCover book={selectedBook} small />
+                <BookCover book={selectedBook} categoryLabels={categoryLabels} small />
                 <div>
-                  {selectedBook.id === 100 && (
-                    <div className="mb-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-amber-500/20 border border-amber-500/40 px-3 py-1 text-xs font-bold text-[#B1844D] shadow-sm">
-                        👑 Особенная книга · Belladonna Press
-                      </span>
-                    </div>
-                  )}
                   <h2 id="reader-title">{selectedBook.title}</h2>
                   <p className="library-reader-author">{selectedBook.author} · {selectedBook.category}</p>
                   <span className="library-summary-label">{t('aboutBook')}</span>
@@ -1305,15 +1396,53 @@ export function LibraryPage() {
       ) : null}
 
       {cartOpen ? (
-        <div className="library-overlay library-drawer-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCartOpen(false); }}>
+        <div className="library-overlay library-drawer-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCart(); }}>
           <aside className="library-drawer" role="dialog" aria-modal="true" aria-labelledby="cart-title">
-            <button type="button" className="library-close-button" onClick={() => setCartOpen(false)}>{t('close')} <X size={18} /></button>
-            <h2 id="cart-title">{t('cart')}</h2>
-            {cartBooks.length ? cartBooks.map((book) => (
-              <div className="library-cart-item" key={book.id}><span>{book.title}</span><button type="button" onClick={() => setCart((current) => current.filter((id) => id !== book.id))}>{t('close')}</button></div>
-            )) : <p className="library-muted">{t('cartEmpty')}</p>}
-            <strong className="library-total">{cartBooks.length ? `${t('total')}: ${total} ₸` : ''}</strong>
-            <button type="button" className="library-primary-button library-wide-button" onClick={() => setNotice(t('checkoutUnavailable'))}>{t('checkout')}</button>
+            <button type="button" className="library-close-button" onClick={closeCart}>{t('close')} <X size={18} /></button>
+            <h2 id="cart-title">{orderSubmitted ? t('orderSuccessTitle') : t('cart')}</h2>
+            {orderSubmitted ? (
+              <div className="library-order-success">
+                <span className="library-order-success-icon"><Check size={22} /></span>
+                <p>{t('orderSuccessCopy')}</p>
+                <button type="button" className="library-primary-button library-wide-button" onClick={closeCart}>{t('continueShopping')}</button>
+              </div>
+            ) : checkoutOpen ? (
+              <>
+                <p className="library-muted library-checkout-intro">{t('checkoutIntro')}</p>
+                {cartBooks.map((book) => (
+                  <div className="library-cart-item" key={book.id}><span>{book.title}</span><strong>{book.price} ₸</strong></div>
+                ))}
+                <strong className="library-total">{t('total')}: {total} ₸</strong>
+                <form className="library-checkout-form" onSubmit={submitOrder}>
+                  <div className="library-form-group">
+                    <label htmlFor="checkout-name">{t('customerName')}</label>
+                    <input id="checkout-name" name="name" className="library-form-input" autoComplete="name" required />
+                  </div>
+                  <div className="library-form-group">
+                    <label htmlFor="checkout-phone">{t('customerPhone')}</label>
+                    <input id="checkout-phone" name="phone" className="library-form-input" type="tel" autoComplete="tel" required />
+                  </div>
+                  <div className="library-form-group">
+                    <label htmlFor="checkout-address">{t('deliveryAddress')}</label>
+                    <textarea id="checkout-address" name="address" className="library-form-input library-form-textarea" autoComplete="street-address" rows={3} required />
+                  </div>
+                  <p className="library-checkout-note">{t('orderDemoNotice')}</p>
+                  <button type="submit" className="library-primary-button library-wide-button">{t('placeOrder')}</button>
+                  <button type="button" className="library-checkout-back" onClick={() => setCheckoutOpen(false)}>{t('backToCart')}</button>
+                </form>
+              </>
+            ) : (
+              <>
+                {cartBooks.length ? cartBooks.map((book) => (
+                  <div className="library-cart-item" key={book.id}>
+                    <span>{book.title}</span>
+                    <span className="library-cart-item-actions"><strong>{book.price} ₸</strong><button type="button" onClick={() => setCart((current) => current.filter((id) => id !== book.id))}>{t('remove')}</button></span>
+                  </div>
+                )) : <p className="library-muted">{t('cartEmpty')}</p>}
+                <strong className="library-total">{cartBooks.length ? `${t('total')}: ${total} ₸` : ''}</strong>
+                {cartBooks.length ? <button type="button" className="library-primary-button library-wide-button" onClick={() => setCheckoutOpen(true)}>{t('checkout')}</button> : null}
+              </>
+            )}
           </aside>
         </div>
       ) : null}
@@ -1383,7 +1512,7 @@ export function LibraryPage() {
                           >
                             <div className="library-custom-cover-overlay library-ready-cover-overlay" style={{ borderColor: template.border }}>
                               <span className="library-cover-category">{newCategory}</span>
-                              <strong>{newTitle || 'Название вашей книги'}</strong>
+                              <strong>{newTitle || t('yourBookTitle')}</strong>
                               <span className="library-cover-author">{nickname}</span>
                             </div>
                           </div>
@@ -1391,23 +1520,26 @@ export function LibraryPage() {
                       })()
                     ) : (
                       <div
-                        className="library-book-cover library-preview-cover"
+                        className={`library-book-cover library-preview-cover${newCover ? ' library-custom-cover library-upload-custom-preview has-uploaded-cover' : ''}`}
                         style={{
                           '--spine-color': newSpine,
+                          borderLeft: newCover ? 0 : undefined,
                           backgroundImage: newCover ? `url(${newCover})` : undefined,
                         } as CSSProperties}
                       >
-                        <div className="library-custom-cover-overlay">
-                          <span className="library-cover-category">{newCategory}</span>
-                          <strong>{newTitle || 'Название вашей книги'}</strong>
-                          <span className="library-cover-author">{nickname}</span>
-                        </div>
+                        {!newCover ? (
+                          <div className="library-custom-cover-overlay">
+                            <span className="library-cover-category">{newCategory}</span>
+                            <strong>{newTitle || t('yourBookTitle')}</strong>
+                            <span className="library-cover-author">{nickname}</span>
+                          </div>
+                        ) : null}
                       </div>
                     )}
 
                     {coverType === 'ready' ? (
                       <div className="library-ready-covers-gallery">
-                        <label className="library-field-sublabel">Выберите стиль оформления:</label>
+                        <label className="library-field-sublabel">{t('chooseCoverStyle')}</label>
                         <div className="library-ready-covers-grid">
                           {READY_COVERS.map((cov) => (
                             <button
@@ -1419,9 +1551,9 @@ export function LibraryPage() {
                                 setSelectedReadyCoverId(cov.id);
                                 setNewSpine(cov.spine);
                               }}
-                              title={cov.name}
+                              title={t(cov.translationKey)}
                             >
-                              <span>{cov.name}</span>
+                              <span>{t(cov.translationKey)}</span>
                             </button>
                           ))}
                         </div>
@@ -1448,7 +1580,7 @@ export function LibraryPage() {
                         />
                         {newCover ? (
                           <div className="library-cover-active-actions">
-                            <span className="library-cover-loaded-badge">✓ Картинка загружена</span>
+                            <span className="library-cover-loaded-badge">✓ {t('coverUploaded')}</span>
                             <button
                               type="button"
                               onClick={() => setNewCover('')}
@@ -1482,7 +1614,7 @@ export function LibraryPage() {
                   <div className="library-author-preview-box">
                     <img src={avatar || DEFAULT_AVATAR} alt="" className="library-author-avatar-badge" />
                     <div>
-                      <span className="library-author-preview-label">Автор книги:</span>
+                      <span className="library-author-preview-label">{t('bookAuthor')}:</span>
                       <strong>{nickname}</strong>
                     </div>
                   </div>
@@ -1497,41 +1629,39 @@ export function LibraryPage() {
                       required
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
-                      placeholder="Например: Мои мысли о будущем"
+                      placeholder={t('bookTitlePlaceholder')}
                       className="library-form-input"
                     />
                   </div>
 
                   <div className="library-form-row">
                     <div className="library-form-group">
-                      <label>{t('bookCategory')}</label>
+                      <label>{t('communityCategories')}</label>
                       <select
-                        value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value)}
+                        value={newCommunityCategory}
+                        onChange={(e) => setNewCommunityCategory(e.target.value)}
                         className="library-form-input"
                       >
-                        <option value="Пользовательские книги">Пользовательские книги</option>
-                        <option value="Художественная литература">Художественная литература</option>
-                        <option value="Основы">Основы</option>
-                        <option value="Архитектура">Архитектура</option>
-                        <option value="Алгоритмы">Алгоритмы</option>
-                        <option value="Практика">Практика</option>
-                        <option value="Языки">Языки</option>
+                        {COMMUNITY_SUBCATEGORIES.map((subcategory) => (
+                          <option key={subcategory.id} value={subcategory.id}>{t(subcategory.key)}</option>
+                        ))}
                       </select>
+                      <p className="library-field-hint">{t('communityBookCategoryHint')}</p>
                     </div>
 
                     <div className="library-form-group">
-                      <label>Язык написания</label>
+                      <label>{t('bookLanguage')}</label>
                       <select
-                        value={newLanguage}
+                        value={effectiveBookLanguage}
                         onChange={(e) => setNewLanguage(e.target.value as 'ru' | 'en' | 'kk' | 'zh')}
                         className="library-form-input"
                       >
-                        <option value="ru">Русский (RU)</option>
-                        <option value="en">English (EN)</option>
-                        <option value="kk">Қазақша (KZ)</option>
-                        <option value="zh">中文 (ZH)</option>
+                        <option value="ru">{t('langRu')} (RU)</option>
+                        <option value="en">{t('langEn')} (EN)</option>
+                        <option value="kk">{t('langKk')} (KZ)</option>
+                        <option value="zh">{t('langZh')} (ZH)</option>
                       </select>
+                      <p className="library-field-hint">{t('bookLanguageAutoHint')}</p>
                     </div>
 
                     <div className="library-form-group">
@@ -1554,7 +1684,7 @@ export function LibraryPage() {
                       rows={2}
                       value={newSummary}
                       onChange={(e) => setNewSummary(e.target.value)}
-                      placeholder="Кратко расскажите, о чем эта книга..."
+                      placeholder={t('bookSummaryPlaceholder')}
                       className="library-form-input library-form-textarea"
                     />
                   </div>
@@ -1594,7 +1724,7 @@ export function LibraryPage() {
                                 type="button"
                                 onClick={() => handleRemovePage(idx)}
                                 className="library-page-remove-btn"
-                                title="Удалить страницу"
+                                title={t('removePage')}
                               >
                                 <X size={14} />
                               </button>
@@ -1604,7 +1734,7 @@ export function LibraryPage() {
                             rows={3}
                             value={pg.text}
                             onChange={(e) => handleUpdatePage(idx, 'text', e.target.value)}
-                            placeholder={t('pageText')}
+                            placeholder={t('pageTextPlaceholder')}
                             className="library-form-input library-page-textarea"
                           />
                         </div>
@@ -1798,7 +1928,7 @@ export function LibraryPage() {
               <div>
                 <span className="library-kicker"><Users size={14} /> {t('friends')}</span>
                 <h2 id="friends-title">{t('friends')} <span>/ {t('chat')}</span></h2>
-                <p className="library-friends-intro">Общайтесь с друзьями, смотрите их профили и отправляйте сообщения.</p>
+                <p className="library-friends-intro">{t('friendsIntro')}</p>
               </div>
               <div className="library-friends-count"><Users size={17} /><strong>{friends.length}</strong><span>{t('friends')}</span></div>
             </div>
@@ -1821,7 +1951,7 @@ export function LibraryPage() {
                   <div className={`library-friend-item ${selectedFriend?.user_id === friend.user_id ? 'is-active' : ''}`} key={friend.user_id}>
                     <button type="button" className="library-friend-select" onClick={() => { setSelectedFriend(friend); setSocialTab('chat'); }}>
                       <img className="library-person-avatar" src={friend.avatar || DEFAULT_AVATAR} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = DEFAULT_AVATAR; }} alt="" />
-                      <span className="library-friend-details"><strong>{friend.nickname}</strong><small>{selectedFriend?.user_id === friend.user_id ? t('chat') : 'Открыть чат'}</small></span>
+                      <span className="library-friend-details"><strong>{friend.nickname}</strong><small>{selectedFriend?.user_id === friend.user_id ? t('chat') : t('openChat')}</small></span>
                       <MessageCircle size={16} className="library-friend-chat-icon" aria-hidden="true" />
                     </button>
                     <div className="library-friend-actions">
@@ -1936,10 +2066,11 @@ export function LibraryPage() {
             '--target-x': `${item.targetX}px`,
             '--target-y': `${item.targetY}px`,
             '--spine-color': item.book.spine,
+            '--fly-rotation': `${item.startX < item.targetX ? 15 : -15}deg`,
           } as CSSProperties}
         >
           <div className="library-book-cover library-flying-cover">
-            <span className="library-cover-category">{item.book.category}</span>
+            <span className="library-cover-category">{categoryLabels[item.book.category] || item.book.category}</span>
             <strong>{item.book.title}</strong>
             <span className="library-cover-author">{item.book.author}</span>
           </div>
