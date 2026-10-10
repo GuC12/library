@@ -1,6 +1,6 @@
 import type { Book } from './books';
-import frontCover from '@/assets/miss-shopaholic/cover-front.png';
-import backCover from '@/assets/miss-shopaholic/cover-back.png';
+import frontCover from '@/assets/miss-shopaholic/cover-front-restored.jpg';
+import backCover from '@/assets/miss-shopaholic/cover-back-restored.jpg';
 
 export const MISS_SHOPAHOLIC_FRONT_COVER = frontCover;
 export const MISS_SHOPAHOLIC_BACK_COVER = backCover;

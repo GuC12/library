@@ -1,14 +1,11 @@
+import { SPECIAL_BOOK_SPINE_COVER } from '@/data/special-book';
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  SPECIAL_BOOK_FRONT_COVER,
-  SPECIAL_BOOK_BACK_COVER,
-  SPECIAL_BOOK_SPINE_COVER,
-} from '@/data/special-book';
+import { books } from '@/data/books';
 import { Sparkles, BookOpen, Eye } from 'lucide-react';
 import { Link } from 'wouter';
 import { useLanguage } from '@/lib/i18n';
 import type { Book } from '@/data/books';
-import { MISS_SHOPAHOLIC_FRONT_COVER, MISS_SHOPAHOLIC_BACK_COVER } from '@/data/miss-shopaholic-book';
+import { BookCoverArt } from '@/components/book-cover-art';
 
 interface Interactive3DBookProps {
   onOpenReader?: () => void;
@@ -29,10 +26,10 @@ export function Interactive3DBook({
   initialRotation = { x: 6, y: -18 },
   book,
 }: Interactive3DBookProps) {
-  const { t } = useLanguage();
-  const isShopaholic = book?.id === 1000;
-  const frontCover = isShopaholic ? MISS_SHOPAHOLIC_FRONT_COVER : SPECIAL_BOOK_FRONT_COVER;
-  const backCover = isShopaholic ? MISS_SHOPAHOLIC_BACK_COVER : SPECIAL_BOOK_BACK_COVER;
+  const { t, language } = useLanguage();
+  const coverBook = book || books[0];
+  const [showBack, setShowBack] = useState(false);
+  const sideLabels = { ru: ['Обложка', 'Оборот'], en: ['Front', 'Back'], kk: ['Мұқаба', 'Артқы бет'], zh: ['封面', '封底'] }[language];
   // Углы вращения в градусах — сразу в 3D ракурсе со страницами и корешком
   const [rotation, setRotation] = useState<{ x: number; y: number }>(initialRotation);
   const [isDragging, setIsDragging] = useState(false);
@@ -153,21 +150,9 @@ export function Interactive3DBook({
               backfaceVisibility: 'visible',
             }}
           >
-            {/* Наружная сторона передней обложки */}
-            <div
-              className="absolute inset-0 bg-cover bg-center rounded-r-[6px] overflow-hidden"
-              style={{
-                backgroundImage: `url(${frontCover})`,
-                boxShadow:
-                  'inset 4px 0 10px rgba(0,0,0,0.5), inset -2px 0 6px rgba(255,255,255,0.15), 0 15px 35px rgba(0,0,0,0.45)',
-              }}
-            >
-              {/* Корешковая тень сгиба */}
-              <div className="absolute left-0 top-0 bottom-0 w-5 bg-gradient-to-r from-black/45 via-black/15 to-transparent pointer-events-none" />
-              {/* Легкий отблеск света */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-amber-200/10 pointer-events-none" />
+            <div className="absolute inset-0 rounded-r-[6px] overflow-hidden" style={{ backfaceVisibility: 'hidden', transform: 'translateZ(0.1px)' }}>
+              <BookCoverArt book={coverBook} compact={compact} />
             </div>
-
             {/* Внутренняя сторона передней обложки (когда открыта) */}
             <div
               className="absolute inset-0 bg-[#35151A] rounded-l-[6px] p-5 flex flex-col justify-between text-[#F4EEE3]"
@@ -213,64 +198,19 @@ export function Interactive3DBook({
                 <span className="text-[9px] font-serif text-[#B1844D]">{t('book3dPage')}</span>
               </div>
               <p className="text-[10px] leading-relaxed text-[#2D2418] font-serif line-clamp-6">
-                {isShopaholic ? book?.pages[0]?.text : t('book3dExcerpt')}
+                {coverBook.excerpt || coverBook.pages[0]?.text || coverBook.summary}
               </p>
             </div>
             <div className="flex items-center justify-center pt-2 border-t border-[#D9C7AA]">
-              <span className="text-[9px] text-stone-500 font-serif italic">{t('book3dLove')}</span>
+              <span className="text-[9px] text-stone-500 font-serif italic">{coverBook.author}</span>
             </div>
           </div>
 
-          {/* Задняя обложка (Back Cover) с полным текстом из PDF */}
-          <div
-            className="book-face book-back absolute inset-0 overflow-hidden rounded-l-[6px] shadow-2xl"
-            style={{
-              width: `${width}px`,
-              height: `${height}px`,
-              transform: `translateZ(${-thickness / 2}px) rotateY(180deg)`,
-              backgroundImage: `url(${backCover})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              boxShadow:
-                'inset -4px 0 10px rgba(0,0,0,0.5), inset 2px 0 6px rgba(255,255,255,0.15)',
-            }}
-          >
-            {/* На задней обложке аннотация уже нанесена. */}
-            {!isShopaholic && <div className="absolute inset-0 p-3 sm:p-3.5 flex flex-col justify-between text-[#F4EEE3] bg-black/40 overflow-hidden">
-              <div>
-                <h3
-                  className="font-serif text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-center text-[#9A2226] leading-tight"
-                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95), 0 0 6px rgba(154,34,38,0.6)' }}
-                >
-                  {t('book3dBackTitle1')}<br />
-                  {t('book3dBackTitle2')}
-                </h3>
-                <p className="mt-1 text-[7.5px] sm:text-[8px] italic text-[#D9C7AA] text-center leading-tight">
-                  {t('book3dTagline')}
-                </p>
-                <p className="mt-1 text-[6.5px] sm:text-[7px] leading-[1.3] text-[#F4EEE3]/90 font-serif text-justify line-clamp-5">
-                  {t('book3dBlurb')}
-                </p>
-                <p className="mt-1 text-[6.5px] sm:text-[7px] italic text-[#B1844D] text-center">
-                  {t('book3dBackQuote')}
-                </p>
-                <div className="mt-1 text-[6px] sm:text-[6.5px] text-stone-300 leading-tight">
-                  <p className="font-bold text-[#D9C7AA]">{t('book3dFeaturesTitle')}</p>
-                  <ul className="list-disc pl-2.5 space-y-0.5 mt-0.5 text-stone-300">
-                    <li>{t('book3dFeature1')}</li>
-                    <li>{t('book3dFeature2')}</li>
-                    <li>{t('book3dFeature3')}</li>
-                  </ul>
-                </div>
-              </div>
-              <div className="flex items-center justify-center border-t border-[#B1844D]/30 pt-1 text-[7px] font-mono text-[#B1844D]">
-                <span>Belladonna Press</span>
-              </div>
-            </div>}
-
-            <div className="absolute right-0 top-0 bottom-0 w-5 bg-gradient-to-l from-black/45 to-transparent pointer-events-none" />
+          {/* Back cover with large, high-contrast live text. */}
+          <div className="book-face book-back absolute inset-0 overflow-hidden rounded-l-[6px] shadow-2xl"
+            style={{ width: `${width}px`, height: `${height}px`, transform: `translateZ(${-thickness / 2}px) rotateY(180deg)`, backfaceVisibility: 'hidden' }}>
+            <BookCoverArt book={coverBook} side="back" compact={compact} />
           </div>
-
           {/* Корешок (Spine - Левая грань) */}
           <div
             className="book-spine absolute top-0 bottom-0 left-0 bg-[#35151A] overflow-hidden"
@@ -278,7 +218,8 @@ export function Interactive3DBook({
               width: `${thickness}px`,
               height: `${height}px`,
               transform: `translateX(${-thickness / 2}px) rotateY(-90deg)`,
-              backgroundImage: `url(${SPECIAL_BOOK_SPINE_COVER})`,
+              backgroundColor: coverBook.spine,
+              backgroundImage: coverBook.id === 100 || coverBook.id === 1000 ? `url(${SPECIAL_BOOK_SPINE_COVER})` : undefined,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               boxShadow:
@@ -339,6 +280,17 @@ export function Interactive3DBook({
         />
       </div>
 
+      <div className="book-cover-side-controls" role="group" aria-label={coverBook.title}>
+        {[false, true].map((back) => (
+          <button type="button" key={String(back)} aria-pressed={showBack === back} onClick={() => {
+            setShowBack(back);
+            setIsOpen(false);
+            const next = { x: initialRotation.x, y: back ? 180 : initialRotation.y };
+            startRotation.current = next;
+            setRotation(next);
+          }}>{sideLabels[back ? 1 : 0]}</button>
+        ))}
+      </div>
       {/* Панель управления 3D-книгой */}
       {showControls ? (
         <>
@@ -381,7 +333,7 @@ export function Interactive3DBook({
             </button>
           ) : (
             <Link
-              href="/library?book=100"
+              href={`/library?book=${coverBook.id}`}
               className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-5 py-2.5 text-xs font-extrabold text-[hsl(var(--primary-foreground))] shadow-md transition hover:scale-105"
             >
               <BookOpen className="h-3.5 w-3.5" />

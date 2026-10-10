@@ -1,0 +1,98 @@
+[
+  {
+    "slug": "white-nights",
+    "url": "https://ru.wikisource.org/wiki/%D0%91%D0%B5%D0%BB%D1%8B%D0%B5_%D0%BD%D0%BE%D1%87%D0%B8_%28%D0%94%D0%BE%D1%81%D1%82%D0%BE%D0%B5%D0%B2%D1%81%D0%BA%D0%B8%D0%B9%29",
+    "originalSha256": "7e3b5fa5e77c0a9fa0cf68c7a7ca1cb90b2bdc54fe71dfa309b984189450f20a",
+    "characters": 102126,
+    "pages": 145,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "overcoat",
+    "url": "https://ru.wikisource.org/wiki/%D0%A8%D0%B8%D0%BD%D0%B5%D0%BB%D1%8C_%28%D0%93%D0%BE%D0%B3%D0%BE%D0%BB%D1%8C%29/%D0%9F%D0%A1%D0%A1_1938_%28%D0%A1%D0%9E%29",
+    "originalSha256": "59d2cdfb552571750f3da482f66f890c0a3e6fb22e31dec28a7af5154d7727d7",
+    "characters": 65085,
+    "pages": 84,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "mumu",
+    "url": "https://ru.wikisource.org/wiki/%D0%9C%D1%83%D0%BC%D1%83_%28%D0%A2%D1%83%D1%80%D0%B3%D0%B5%D0%BD%D0%B5%D0%B2%29",
+    "originalSha256": "9d40ade7e8bc831713d89540e804297e79937196bb5db68813ea246d4c4d9a4c",
+    "characters": 53567,
+    "pages": 74,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "asya",
+    "url": "https://ru.wikisource.org/wiki/%D0%90%D1%81%D1%8F_%28%D0%A2%D1%83%D1%80%D0%B3%D0%B5%D0%BD%D0%B5%D0%B2%29",
+    "originalSha256": "fd28f419e8e5988b492ad0279360189e53e09b490dadb3541d04266d03dfcf83",
+    "characters": 85663,
+    "pages": 121,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "alice",
+    "url": "https://www.gutenberg.org/ebooks/11",
+    "originalSha256": "01b38ea4c710a84bc18d0bd41271a5a1a92b94e97b2812f4dece97d4a694725e",
+    "characters": 144529,
+    "pages": 215,
+    "cover": "Project Gutenberg EPUB: OEBPS/7981341119032183217_cover.jpg"
+  },
+  {
+    "slug": "pride-prejudice",
+    "url": "https://www.gutenberg.org/ebooks/1342",
+    "originalSha256": "3f6bb9d6f78e0293b56acd4714dd68cb7d6d1d293402031ce9d5a216bcaf9d75",
+    "characters": 728264,
+    "pages": 1049,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "sherlock-holmes",
+    "url": "https://www.gutenberg.org/ebooks/1661",
+    "originalSha256": "922e2a12ccb43a4c9544c260b2166c6ad2097aeb5957faeee113f173bb857cd0",
+    "characters": 562137,
+    "pages": 811,
+    "cover": "Project Gutenberg EPUB: OEBPS/7642932015471962097_cover.jpg"
+  },
+  {
+    "slug": "treasure-island",
+    "url": "https://www.gutenberg.org/ebooks/120",
+    "originalSha256": "5bc08275eacea8640b1aa185c645283bb8c564d7b23df6b03437d229b4fc6ebd",
+    "characters": 364356,
+    "pages": 541,
+    "cover": "Project Gutenberg EPUB: OEBPS/6484518377310807417_cover.jpg"
+  },
+  {
+    "slug": "eskendir",
+    "url": "https://wikisource.org/wiki/%D0%95%D1%81%D0%BA%D0%B5%D0%BD%D0%B4%D1%96%D1%80",
+    "originalSha256": "8ba8d88cf23ca618d1775f9b931bbca7bd14bb5fb3c5a62e78dc20f750585ec6",
+    "characters": 5917,
+    "pages": 8,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "masgut",
+    "url": "https://wikisource.org/wiki/%D0%9C%D0%B0%D1%81%D2%93%D2%B1%D1%82",
+    "originalSha256": "4296ad8f58725fda6f21cdb5072894895f64f7f4449502b86aa714e42f52f9ac",
+    "characters": 6285,
+    "pages": 8,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "analects",
+    "url": "https://www.gutenberg.org/ebooks/23839",
+    "originalSha256": "dd2385d1e6bc3a5cde6d4d5efdf16d1bab0bff40a0209a7dc9c4909b80bf3035",
+    "characters": 24459,
+    "pages": 72,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  },
+  {
+    "slug": "tao-te-ching",
+    "url": "https://www.gutenberg.org/ebooks/7337",
+    "originalSha256": "e162e8f8e3a6cee107748b2cb363e8b35c16d58ea9465ce06dd708ada9765033",
+    "characters": 7410,
+    "pages": 22,
+    "cover": "Original vector cover created for this library; not a facsimile of a publisher edition."
+  }
+]

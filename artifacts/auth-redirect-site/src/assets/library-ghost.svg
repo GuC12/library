@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 260" fill="none">
+  <title>Умный призрак — гид по библиотеке</title>
+  <defs>
+    <linearGradient id="body" x1="52" y1="40" x2="184" y2="225" gradientUnits="userSpaceOnUse"><stop stop-color="#fffdf5"/><stop offset=".65" stop-color="#f0f4e9"/><stop offset="1" stop-color="#cbded0"/></linearGradient>
+    <linearGradient id="lens" x1="50" y1="98" x2="186" y2="132" gradientUnits="userSpaceOnUse"><stop stop-color="#c2e3dc" stop-opacity=".65"/><stop offset="1" stop-color="#edf7ef" stop-opacity=".35"/></linearGradient>
+  </defs>
+  <ellipse cx="124" cy="242" rx="61" ry="8" fill="#183e33" opacity=".14"/>
+  <path d="M194 186C212 149 207 95 186 59C165 21 121 14 83 32C43 52 31 88 36 126C39 160 52 184 78 195C102 205 116 194 135 203C151 210 161 229 171 236C169 215 188 200 194 186Z" fill="url(#body)" stroke="#244638" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M56 82C61 58 81 45 103 42" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+  <path d="M62 92L83 85M149 84L170 92" stroke="#244638" stroke-width="4" stroke-linecap="round"/>
+  <path d="M48 104L58 132L92 136L106 110L83 100Z M132 110L146 136L180 132L191 104L156 100Z" fill="url(#lens)" stroke="#244638" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M106 113Q119 101 132 113M37 103L48 109M192 109L203 103" stroke="#244638" stroke-width="5" stroke-linecap="round"/>
+  <path d="M63 111L77 108M148 111L162 108" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+  <ellipse cx="79" cy="120" rx="4" ry="6" fill="#244638"/><ellipse cx="159" cy="120" rx="4" ry="6" fill="#244638"/>
+  <ellipse cx="66" cy="148" rx="10" ry="5" fill="#e5afa2" opacity=".55"/><ellipse cx="173" cy="148" rx="10" ry="5" fill="#e5afa2" opacity=".55"/>
+  <path d="M106 151Q120 164 134 151" stroke="#244638" stroke-width="4" stroke-linecap="round"/>
+  <path d="M26 54L29 44L32 54L42 57L32 60L29 70L26 60L16 57Z" fill="#d4ac66"/><path d="M208 166L210 159L212 166L219 168L212 170L210 177L208 170L201 168Z" fill="#d4ac66"/>
+</svg>

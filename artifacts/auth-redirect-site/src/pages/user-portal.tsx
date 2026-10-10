@@ -1,5 +1,6 @@
+import { LibraryBrandIcon } from '@/components/library-brand-icon';
 import { useClerk, useUser } from '@clerk/react';
-import { BookOpen, Camera, Check, LogOut, RotateCcw, Trash2, UserRound } from 'lucide-react';
+import { Camera, Check, LogOut, RotateCcw, Trash2, UserRound } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
 import { LanguageSwitcher } from '@/components/language-switcher';
@@ -31,8 +32,8 @@ export function UserPortalPage() {
     return (
       <main className="gate-noise flex min-h-[100dvh] items-center justify-center bg-[hsl(var(--background))] px-5">
         <div className="w-full max-w-md text-center" data-testid="status-loading-account">
-          <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[2rem] bg-[hsl(var(--sidebar))] shadow-[0_16px_40px_hsl(33.5_37.8%_17.6%/.2)]">
-            <BookOpen className="h-10 w-10 text-[hsl(var(--card))]" strokeWidth={1.4} aria-hidden="true" />
+          <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[2rem] bg-[hsl(var(--card))] shadow-[0_16px_40px_hsl(33.5_37.8%_17.6%/.2)]">
+            <LibraryBrandIcon className="h-14 w-12" />
           </div>
            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--accent-foreground))]">{t('account')}</p>
            <h1 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.03em] text-[hsl(var(--foreground))]">{t('checkingShelf')}</h1>
@@ -106,8 +107,8 @@ export function UserPortalPage() {
     <main className="gate-noise flex min-h-[100dvh] items-center justify-center bg-[hsl(var(--background))] px-5 py-12">
       <div className="w-full max-w-2xl rounded-[2rem] border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-7 shadow-[var(--shadow-md)] sm:p-10" data-testid="account-choice">
         <div className="flex items-center justify-between">
-          <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[hsl(var(--sidebar))] transition-transform hover:scale-105" title={t('backHome')}>
-            <BookOpen className="h-6 w-6 text-[hsl(var(--card))]" strokeWidth={1.8} aria-hidden="true" />
+          <Link href="/" className="flex h-11 w-11 items-center justify-center rounded-[14px] transition-transform hover:scale-105" title={t('backHome')}>
+            <LibraryBrandIcon className="h-11 w-10" />
           </Link>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
@@ -202,7 +203,7 @@ export function UserPortalPage() {
         <div className="mt-8 grid gap-3 sm:grid-cols-2">
           <Link href="/library" className="group inline-flex items-center justify-center gap-3 rounded-full bg-[hsl(var(--primary))] px-5 py-3.5 text-sm font-bold text-[hsl(var(--primary-foreground))] shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="link-open-library">
             {t('openLibrary')}
-            <BookOpen className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            <LibraryBrandIcon className="h-5 w-5 rounded-sm bg-[hsl(var(--card))] p-0.5 transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link href="/" className="inline-flex items-center justify-center gap-3 rounded-full border border-[hsl(var(--border))] px-5 py-3.5 text-sm font-bold text-[hsl(var(--foreground))] transition-colors hover:bg-[hsl(var(--secondary)/.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))]" data-testid="button-stay-here">
             {t('stayOnSite')}

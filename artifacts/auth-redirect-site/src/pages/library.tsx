@@ -1,8 +1,11 @@
+import { PageSheet } from '@/components/book-page-sheet';
+import { loadBookPages } from '@/lib/book-text';
+import { catalogueCopy } from '@/data/catalogue-copy';
+import { LibraryBrandIcon } from '@/components/library-brand-icon';
 import { useClerk, useUser } from '@clerk/react';
 import {
   Award,
   Bookmark,
-  BookOpen,
   Camera,
   Check,
   ChevronLeft,
@@ -27,12 +30,15 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { books, initialUserBooks, type Book, type BookPage } from '@/data/books';
+import { books, initialUserBooks, isLegacyDemoBook, type Book, type BookPage } from '@/data/books';
 import { quotes } from '@/data/quotes';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { useLanguage } from '@/lib/i18n';
 import { DEFAULT_AVATAR, useUserProfile } from '@/lib/user-profile';
 import { Interactive3DBook } from '@/components/interactive-3d-book';
+import { BookCoverArt, getBookArtwork } from '@/components/book-cover-art';
+import { LibraryGuide } from '@/components/library-guide';
+import { guideCopy } from '@/data/library-guide';
 import {
   addReadingXp,
   calculateLevel,
@@ -174,68 +180,14 @@ const readStorage = <T,>(key: string, fallback: T): T => {
   }
 };
 
-function PageSheet({
-  page,
-  number,
-  side,
-  onTurn,
-  disabled,
-}: {
-  page?: BookPage;
-  number: number;
-  side: 'left' | 'right';
-  onTurn?: () => void;
-  disabled?: boolean;
-}) {
-  if (!page) {
-    return <article className={`library-page library-page-${side} library-page-empty`} aria-hidden="true" />;
-  }
-
-  const interactive = Boolean(onTurn) && !disabled;
-
-  return (
-    <article
-      className={`library-page library-page-${side}${interactive ? ' is-interactive' : ''}${page.pageImage ? ' library-page-has-image' : ''}`}
-      onClick={interactive ? onTurn : undefined}
-      onKeyDown={interactive ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTurn?.(); } } : undefined}
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-    >
-      {page.pageImage ? (
-        <div className="library-page-image-wrapper">
-          <img
-            src={page.pageImage}
-            alt={page.title || `Страница ${number}`}
-            className="library-page-pdf-image"
-            loading="eager"
-          />
-        </div>
-      ) : (
-        <>
-          <span>{page.kicker}</span>
-          <h3>{page.title}</h3>
-          <p>{page.text}</p>
-          <small>{number}</small>
-        </>
-      )}
-    </article>
-  );
-}
-
 function BookCover({ book, small = false, categoryLabels }: { book: Book; small?: boolean; categoryLabels: Record<string, string> }) {
   const translatedCategory = categoryLabels[book.category] || book.category;
-  if (book.id === 100 || book.id === 1000) {
+  if (getBookArtwork(book)) {
     return (
-      <div
-        className={`library-book-cover ${small ? 'library-book-cover-small' : ''} library-custom-cover overflow-hidden`}
-        style={{
-          '--spine-color': book.spine || '#4A151B',
-          backgroundImage: `url(${book.coverImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
-        } as CSSProperties}
-      />
+      <div className={`library-book-cover library-photo-cover ${small ? 'library-book-cover-small' : ''}`}
+        style={{ '--spine-color': book.spine } as CSSProperties}>
+        <BookCoverArt book={book} compact={small} categoryLabel={translatedCategory} />
+      </div>
     );
   }
 
@@ -292,6 +244,7 @@ export function LibraryPage() {
   const { user } = useUser();
   const { signOut } = useClerk();
   const { t, language } = useLanguage();
+  const catalogText = catalogueCopy[language];
   const { nickname, avatar, updateProfile, saveAvatarFile, resetAvatar, isSaving: isProfileSaving } = useUserProfile();
 
   const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * quotes.length));
@@ -307,10 +260,27 @@ export function LibraryPage() {
   };
 
   const currentQuote = quotes[quoteIndex] ?? quotes[0];
+  const [guideOpenRequest, setGuideOpenRequest] = useState(0);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
+  useEffect(() => { setCategory('all'); }, [language]);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [readerTab, setReaderTab] = useState<'summary' | 'full'>('summary');
+  const [readerError, setReaderError] = useState(false);
+  const [readerRetry, setReaderRetry] = useState(0);
+  const [jumpPage, setJumpPage] = useState('');
+  useEffect(() => {
+    let active = true;
+    setReaderError(false);
+    if (selectedBook?.textPath && !selectedBook.pages.length) {
+      const requestedBook = selectedBook;
+      loadBookPages(requestedBook).then((pages) => {
+        if (active) setSelectedBook((current) => current?.id === requestedBook.id ? { ...current, pages } : current);
+      }).catch(() => { if (active) setReaderError(true); });
+    }
+    return () => { active = false; };
+  }, [selectedBook?.id, readerRetry]);
+
   const [pageIndex, setPageIndex] = useState(0);
   const [isTurning, setIsTurning] = useState(false);
   const [turnDirection, setTurnDirection] = useState<'next' | 'previous'>('next');
@@ -431,7 +401,7 @@ export function LibraryPage() {
 
   // Пользовательские книги (синхронизируются с облачной базой Supabase в реальном времени)
   const [userBooks, setUserBooks] = useState<Book[]>(() => {
-    const stored = readStorage<Book[]>('library-user-books', []);
+    const stored = readStorage<Book[]>('library-user-books', []).filter((book) => !isLegacyDemoBook(book));
     const storedIds = new Set(stored.map((b) => b.id));
     const merged = [...stored, ...initialUserBooks.filter((b) => !storedIds.has(b.id))];
     return merged;
@@ -488,7 +458,7 @@ export function LibraryPage() {
     };
 
     const handleLocalBroadcast = () => {
-      const stored = readStorage<Book[]>('library-user-books', []);
+      const stored = readStorage<Book[]>('library-user-books', []).filter((book) => !isLegacyDemoBook(book));
       const storedIds = new Set(stored.map((b) => b.id));
       const merged = [...stored, ...initialUserBooks.filter((b) => !storedIds.has(b.id))];
       setUserBooks(merged);
@@ -506,14 +476,14 @@ export function LibraryPage() {
   }, []);
 
   const allBooks = useMemo(() => {
-    const featuredBook = books[0];
-    const featuredTitle = featuredBook.title.trim().toLocaleLowerCase();
-    const otherUserBooks = userBooks.filter((book) => book.title.trim().toLocaleLowerCase() !== featuredTitle);
-    return [featuredBook, ...otherUserBooks, ...books.slice(1)];
+    const featuredTitles = new Set(books.slice(0, 2).map((book) => book.title.trim().toLocaleLowerCase()));
+    const otherUserBooks = userBooks.filter((book) => !isLegacyDemoBook(book) && !featuredTitles.has(book.title.trim().toLocaleLowerCase()));
+    return [...books.slice(0, 2), ...otherUserBooks, ...books.slice(2)];
   }, [userBooks]);
   const categoryLabels: Record<string, string> = {
     'Пользовательские книги': t('categoryCommunity'),
     'Художественная литература': t('categoryFiction'),
+    'Философия': catalogText.philosophy,
     Основы: t('categoryBasics'),
     Архитектура: t('categoryArchitecture'),
     Алгоритмы: t('categoryAlgorithms'),
@@ -733,9 +703,7 @@ export function LibraryPage() {
       return true;
     });
 
-    // Keep the featured special edition at the front of the catalog.
-    const special = result.find((book) => book.id === 100);
-    return special ? [special, ...result.filter((book) => book.id !== 100)] : result;
+    return result;
   }, [allBooks, bookLikes, category, communitySubcategory, query, subLang, t, user?.id]);
 
   useEffect(() => {
@@ -756,6 +724,7 @@ export function LibraryPage() {
   useEffect(() => {
     if (!selectedBook || readerTab !== 'full') return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (event.key === 'ArrowRight') turnPages('next');
       if (event.key === 'ArrowLeft') turnPages('previous');
       if (event.key === 'Escape') setSelectedBook(null);
@@ -765,8 +734,8 @@ export function LibraryPage() {
   }, [readerTab, selectedBook, isTurning, pageIndex]);
 
   const turnPages = (direction: 'next' | 'previous') => {
-    if (!selectedBook || isTurning) return;
-    const lastStart = Math.max(0, selectedBook.pages.length - 2);
+    if (!selectedBook || !selectedBook.pages.length || isTurning) return;
+    const lastStart = Math.max(0, Math.floor((selectedBook.pages.length - 1) / 2) * 2);
     const nextIndex = direction === 'next'
       ? Math.min(pageIndex + 2, lastStart)
       : Math.max(pageIndex - 2, 0);
@@ -795,7 +764,8 @@ export function LibraryPage() {
   const openReader = (book: Book, startPage = 0) => {
     if (turnTimer.current) window.clearTimeout(turnTimer.current);
     setSelectedBook(book);
-    setPageIndex(Math.min(startPage, Math.max(0, book.pages.length - 2)));
+    setPageIndex(Math.floor(Math.max(0, Math.min(startPage, (book.pageCount || book.pages.length) - 1)) / 2) * 2);
+    setJumpPage('');
     setReaderTab('summary');
     setIsTurning(false);
     setTurningTo(null);
@@ -1058,7 +1028,7 @@ export function LibraryPage() {
     <div className="library-app">
       <header className="library-header">
         <a className="library-logo" href="#top" aria-label={`${t('brand')} — ${t('all')}`}>
-          <span className="library-logo-mark"><BookOpen size={19} strokeWidth={1.8} /></span>
+          <LibraryBrandIcon className="library-logo-image" />
           <span>{t('brand')}</span>
         </a>
         <label className="library-search">
@@ -1091,6 +1061,7 @@ export function LibraryPage() {
           </button>
         </nav>
         <div className="library-header-actions">
+          <button type="button" className="library-guide-nav-button" data-testid="button-library-guide" onClick={() => setGuideOpenRequest((count) => count + 1)} title={guideCopy[language].open} aria-label={guideCopy[language].open}><MessageCircle size={17} aria-hidden="true" /><span>{guideCopy[language].open}</span></button>
           <LanguageSwitcher />
           <button
             type="button"
@@ -1138,7 +1109,7 @@ export function LibraryPage() {
           <div>
             <p className="library-kicker">{t('librarySpace')}</p>
             <h1>{t('libraryHero')}</h1>
-            <p className="library-hero-copy">{t('libraryHeroCopy')}</p>
+            <p className="library-hero-copy">{catalogText.intro}</p>
           </div>
           <div className="library-shelf" aria-hidden="true">
             <span className="shelf-book shelf-book-one" />
@@ -1231,8 +1202,8 @@ export function LibraryPage() {
           {filteredBooks.length ? (
             <div className="library-book-grid">
               {filteredBooks.map((book) => (
-                <article className={`library-book-card ${book.id === 100 || book.id === 1000 ? 'library-book-card-special' : ''}`} key={book.id}>
-                  {book.id === 100 || book.id === 1000 ? (
+                <article className={`library-book-card ${book.id === books[0].id || book.id === books[1].id ? 'library-book-card-special' : ''}`} key={book.id}>
+                  {book.id === books[0].id || book.id === books[1].id ? (
                     <div className="library-card-3d-stage flex flex-col items-center justify-center relative min-h-[290px] pt-1">
                       <Interactive3DBook
                         compact={true}
@@ -1329,8 +1300,8 @@ export function LibraryPage() {
         <div className="library-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedBook(null); }}>
           <section className="library-reader" role="dialog" aria-modal="true" aria-labelledby="reader-title">
             <div className="library-reader-toolbar">
-              <span><span className="library-reader-dot" /> {selectedBook.title}</span>
-              <span className="library-reader-progress">{readerTab === 'summary' ? t('summary') : `${Math.min(pageIndex + 2, selectedBook.pages.length)} / ${selectedBook.pages.length} ${t('pages')}`}</span>
+              <span id="reader-title"><span className="library-reader-dot" /> {selectedBook.title}</span>
+              <span className="library-reader-progress">{readerTab === 'summary' ? t('summary') : `${Math.min(pageIndex + 2, selectedBook.pageCount || selectedBook.pages.length)} / ${selectedBook.pageCount || selectedBook.pages.length} ${t('pages')}`}</span>
               <button type="button" onClick={() => setSelectedBook(null)} aria-label={t('close')}>{t('close')} <X size={18} /></button>
             </div>
             <div className="library-reader-tabs">
@@ -1341,10 +1312,17 @@ export function LibraryPage() {
               <div className="library-summary">
                 <BookCover book={selectedBook} categoryLabels={categoryLabels} small />
                 <div>
-                  <h2 id="reader-title">{selectedBook.title}</h2>
+                  <h2>{selectedBook.title}</h2>
                   <p className="library-reader-author">{selectedBook.author} · {selectedBook.category}</p>
                   <span className="library-summary-label">{t('aboutBook')}</span>
                   <p className="library-summary-copy">{selectedBook.summary}</p>
+                  {selectedBook.sourceUrl && <div className="library-source-details">
+                    <span>{catalogText.complete} · {selectedBook.language?.toUpperCase()} · {selectedBook.pageCount} {t('pages')}{selectedBook.publicationYear ? ` · ${selectedBook.publicationYear}` : ''}</span>
+                    <a href={selectedBook.sourceUrl} target="_blank" rel="noopener noreferrer">{catalogText.source}: {selectedBook.sourceName} ↗</a>
+                    <small>{selectedBook.sourceLicense}</small>
+                    <a href={`${import.meta.env.BASE_URL}books/SOURCES.md`} target="_blank" rel="noopener noreferrer">{catalogText.rights} ↗</a>
+                    {selectedBook.downloadPath && <a href={`${import.meta.env.BASE_URL}${selectedBook.downloadPath}`} download>{catalogText.download} ↓</a>}
+                  </div>}
                   <div className="library-book-owner-actions">
                     {selectedBook.ownerId === user?.id ? (
                       <>
@@ -1358,12 +1336,17 @@ export function LibraryPage() {
                   </div>
                 </div>
               </div>
+            ) : !selectedBook.pages.length ? (
+              <div className="library-reader-status" role="status">
+                <p>{readerError ? catalogText.error : catalogText.loading}</p>
+                {readerError && <button type="button" className="library-primary-button" onClick={() => setReaderRetry((value) => value + 1)}>{catalogText.retry}</button>}
+              </div>
             ) : (
-              <div className="library-full-reader">
+              <div className="library-full-reader" lang={selectedBook.language}>
                 <div className={`library-book-spread ${isTurning ? `is-turning turn-${turnDirection}` : ''}`}>
                   <div className="library-spread-static">
                     <PageSheet page={leftPage} number={leftNumber} side="left" disabled={isTurning} onTurn={pageIndex === 0 ? undefined : () => turnPages('previous')} />
-                    <PageSheet page={rightPage} number={rightNumber} side="right" disabled={isTurning} onTurn={pageIndex >= selectedBook.pages.length - 2 ? undefined : () => turnPages('next')} />
+                    <PageSheet page={rightPage} number={rightNumber} side="right" disabled={isTurning} onTurn={pageIndex + 2 >= selectedBook.pages.length ? undefined : () => turnPages('next')} />
                   </div>
                   {isTurning ? (
                     <div className="library-flip-leaf" aria-hidden="true">
@@ -1380,10 +1363,20 @@ export function LibraryPage() {
                     </div>
                   ) : null}
                 </div>
+                <form className="library-page-jump" onSubmit={(event) => {
+                  event.preventDefault();
+                  const page = Number(jumpPage);
+                  if (!Number.isInteger(page) || page < 1 || page > selectedBook.pages.length || isTurning) return;
+                  setPageIndex(Math.floor((page - 1) / 2) * 2);
+                }}>
+                  <label htmlFor="reader-jump">{catalogText.page}</label>
+                  <input id="reader-jump" type="number" min="1" max={selectedBook.pages.length} value={jumpPage} placeholder={String(pageIndex + 1)} onChange={(event) => setJumpPage(event.target.value)} required />
+                  <button className="library-outline-button" type="submit" disabled={isTurning}>{catalogText.go}</button>
+                </form>
                 <div className="library-page-controls">
                   <button type="button" disabled={pageIndex === 0 || isTurning} onClick={() => turnPages('previous')}><ChevronLeft size={16} /> {t('previous')}</button>
                   <span>{pageIndex + 1}—{Math.min(pageIndex + 2, selectedBook.pages.length)} / {selectedBook.pages.length} {t('pages')}</span>
-                  <button type="button" disabled={pageIndex >= selectedBook.pages.length - 2 || isTurning} onClick={() => turnPages('next')}>{t('next')} <ChevronRight size={16} /></button>
+                  <button type="button" disabled={pageIndex + 2 >= selectedBook.pages.length || isTurning} onClick={() => turnPages('next')}>{t('next')} <ChevronRight size={16} /></button>
                 </div>
               </div>
             )}
@@ -1453,7 +1446,7 @@ export function LibraryPage() {
             <button type="button" className="library-close-button" onClick={() => setBookmarksOpen(false)}>{t('close')} <X size={18} /></button>
             <h2 id="bookmarks-title">{t('myBookmarks')}</h2>
             {Object.entries(bookmarks).length ? Object.entries(bookmarks).map(([id, bookmark]) => (
-              <button type="button" className="library-bookmark-item" key={id} onClick={() => { setBookmarksOpen(false); const book = books.find((item) => item.id === Number(id)); if (book) openReader(book, Math.max(0, bookmark.page - 1)); }}>
+              <button type="button" className="library-bookmark-item" key={id} onClick={() => { setBookmarksOpen(false); const book = allBooks.find((item) => item.id === Number(id)); if (book) openReader(book, Math.max(0, bookmark.page - 1)); }}>
                 <span>{bookmark.title}</span><span>{t('page')} {bookmark.page}</span>
               </button>
             )) : <p className="library-muted">{t('noBookmarks')}</p>}
@@ -2077,6 +2070,7 @@ export function LibraryPage() {
         </div>
       ))}
 
+      <LibraryGuide openRequest={guideOpenRequest} blocked={Boolean(selectedBook || cartOpen || bookmarksOpen || accountOpen || photoPreview || friendsOpen || leaderboardOpen || uploadModalOpen)} />
       {notice ? <div className="library-toast" role="status">{notice}</div> : null}
     </div>
   );

@@ -1,6 +1,6 @@
 import type { Book, BookPage } from './books';
-import frontCoverImg from '@/assets/special-book/cover-front.jpg';
-import backCoverImg from '@/assets/special-book/cover-back.jpg';
+import frontCoverImg from '@/assets/special-book/cover-front-restored.jpg';
+import backCoverImg from '@/assets/special-book/cover-back-restored.jpg';
 import spineCoverImg from '@/assets/special-book/cover-spine.jpg';
 
 export const SPECIAL_BOOK_FRONT_COVER = frontCoverImg;
