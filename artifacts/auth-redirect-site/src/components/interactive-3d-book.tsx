@@ -39,9 +39,22 @@ export function Interactive3DBook({
   const lastMousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startRotation = useRef(initialRotation);
   const returnTimer = useRef<number | null>(null);
+  const scene = useRef<HTMLDivElement>(null);
+  const [canAnimate, setCanAnimate] = useState(false);
 
   useEffect(() => {
-    if (isDragging || isReturning) return;
+    const preference = matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+    let visible = false;
+    const update = () => setCanAnimate(preference.matches && visible && !document.hidden);
+    const observer = new IntersectionObserver(entries => { visible = entries[0].isIntersecting; update(); });
+    if (scene.current) observer.observe(scene.current);
+    preference.addEventListener('change', update);
+    document.addEventListener('visibilitychange', update);
+    return () => { observer.disconnect(); preference.removeEventListener('change', update); document.removeEventListener('visibilitychange', update); };
+  }, []);
+
+  useEffect(() => {
+    if (!canAnimate || isDragging || isReturning) return;
 
     const interval = window.setInterval(() => {
       const time = Date.now();
@@ -52,7 +65,7 @@ export function Interactive3DBook({
     }, 30);
 
     return () => window.clearInterval(interval);
-  }, [isDragging, isReturning]);
+  }, [canAnimate, isDragging, isReturning]);
 
   useEffect(() => {
     return () => {
@@ -70,7 +83,7 @@ export function Interactive3DBook({
     setIsReturning(false);
     setIsDragging(true);
     lastMousePos.current = { x: e.clientX, y: e.clientY };
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -98,7 +111,7 @@ export function Interactive3DBook({
       returnTimer.current = null;
     }, 920);
     try {
-      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+      e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
       // ignore
     }
@@ -110,12 +123,13 @@ export function Interactive3DBook({
 
   return (
     <div
+      ref={scene}
       className={`interactive-3d-book-container select-none flex flex-col items-center justify-center ${className}`}
       style={{ perspective: '1200px' }}
     >
       {/* 3D Сцена */}
       <div
-        className={`relative cursor-grab active:cursor-grabbing ${compact ? 'p-1 sm:p-2' : 'p-6 sm:p-10'} flex items-center justify-center touch-none`}
+        className={`relative cursor-grab active:cursor-grabbing ${compact ? 'p-1 sm:p-2' : 'p-6 sm:p-10'} flex items-center justify-center touch-pan-y`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

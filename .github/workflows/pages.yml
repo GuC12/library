@@ -35,9 +35,9 @@ jobs:
         run: pnpm --filter @workspace/auth-redirect-site run build:pages
         env:
           BASE_PATH: /library/
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_Z29vZC13YXJ0aG9nLTIxMzAuY2xlcmsuYWNjb3VudHMuZGV2JA' }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://agczrwolpybmbwsyfond.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnY3pyd29scHlibWJ3c3lmb25kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3ODk0NTMsImV4cCI6MjEwNTM2NTQ1M30.3ti-SrKUIKz_nd9YGbg0emw8tfxEdUQ23NVeBZ3Xd3Y' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

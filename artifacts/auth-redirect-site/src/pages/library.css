@@ -2621,4 +2621,80 @@
 .library-scan-toolbar input { width: clamp(70px, 18vw, 200px); }
 .library-scan-toolbar button { border: 1px solid #cabb9f; background: #fffdf8; border-radius: 8px; padding: 8px 12px; }
 .library-scan-viewport { height: calc(100% - 64px); overflow: auto; overscroll-behavior: contain; }
+
+/* Stable touch layouts: navigation scrolls instead of shrinking its labels. */
+.library-adaptive-reader .library-book-spread .library-flip-leaf {
+  animation-duration: 480ms;
+  will-change: transform;
+}
+.library-adaptive-reader .library-book-spread {
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+@media (max-width: 760px) {
+  .library-nav { justify-content: flex-start; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+  .library-nav button { flex: 0 0 auto; -webkit-tap-highlight-color: transparent; }
+  .library-nav-account-btn { margin-left: 0; }
+  .library-overlay {
+    padding: max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .library-reader {
+    width: 100%;
+    max-height: calc(100dvh - 8px);
+    border-radius: 12px;
+    overscroll-behavior: contain;
+    scroll-behavior: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .library-reader-toolbar {
+    min-height: 48px;
+    height: 48px;
+    box-sizing: border-box;
+    padding-inline: 12px;
+  }
+  .library-reader-tabs { top: 48px; }
+  .library-reader-toolbar, .library-reading-tools { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .library-reading-tools {
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .library-reading-tools input { min-width: 0; }
+  .library-page-controls button, .library-page-jump button, .library-page-jump input,
+  .library-reader-toolbar button, .library-reading-tools button,
+  .library-card-actions button {
+    min-height: 42px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .library-app input:not([type='range']):not([type='checkbox']), .library-app select, .library-app textarea { font-size: 16px; }
+  .library-page-controls {
+    position: sticky;
+    bottom: 0;
+    z-index: 9;
+    margin-top: 10px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: #f4eee3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .library-page-controls span { white-space: nowrap; font-size: 13px; font-weight: 600; }
+  .library-book-card-summary { font-size: 12px; line-height: 1.5; }
+  .library-book-card h3 { font-size: 14px; }
+  .library-card-actions .library-primary-button:first-child { font-size: 12px; }
+  .library-page {
+    min-height: 340px;
+    padding: 20px 14px 40px;
+  }
+}
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .book-3d { will-change: auto; }
+  * { -webkit-tap-highlight-color: transparent; }
+}
 .library-scan-viewport img { display: block; max-width: none; height: auto; }
+

@@ -16,6 +16,7 @@ export const AdaptiveReader = forwardRef<AdaptiveReaderHandle, {
   const { t } = useLanguage();
   const container = useRef<HTMLDivElement>(null);
   const flipTimer = useRef<number | undefined>(undefined);
+  const turning = useRef(false);
   const [size, setSize] = useState({ width: 0, height: 600 });
   const [flip, setFlip] = useState<FlipState | null>(null);
   const [jump, setJump] = useState('');
@@ -30,13 +31,14 @@ export const AdaptiveReader = forwardRef<AdaptiveReaderHandle, {
   const textSize = Math.max(16, Math.min(28, fontSize));
   const textWidth = Math.max(100, Math.min(leafWidth - 64, (width === 'narrow' ? 28 : width === 'medium' ? 38 : 54) * textSize * .5));
   const leaves = useMemo<ReaderLeaf[]>(() => {
+    if (!size.width) return [];
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     if (context) context.font = `${textSize}px Georgia`;
     const fits = createPageFit(textWidth - 4, leafHeight - 124, textSize,
       text => context?.measureText(text).width ?? text.length * textSize * .55);
     return paginateBookPages(readingPages, fits);
-  }, [readingPages, textWidth, leafHeight, textSize]);
+  }, [readingPages, textWidth, leafHeight, textSize, Boolean(size.width)]);
   const index = Math.floor(locateLeaf(leaves, location) / columns) * columns;
   const shownIndex = flip?.from ?? index;
   const last = Math.max(0, Math.floor((leaves.length - 1) / columns) * columns);
@@ -44,13 +46,26 @@ export const AdaptiveReader = forwardRef<AdaptiveReaderHandle, {
   useEffect(() => {
     const element = container.current;
     if (!element) return;
-    const update = () => setSize({ width: Math.floor(element.getBoundingClientRect().width), height: Math.max(380, window.innerHeight - 220) });
+    let timer: number | undefined;
+    const measure = () => {
+      const nextWidth = Math.floor(element.getBoundingClientRect().width);
+      // Mobile browser bars opening/closing must not repaginate the whole book.
+      const nextHeight = Math.max(380, window.innerHeight - 220);
+      setSize(current => current.width === nextWidth ? current : { width: nextWidth, height: nextHeight });
+    };
+    const update = () => { window.clearTimeout(timer); timer = window.setTimeout(measure, 120); };
     const observer = new ResizeObserver(update);
     observer.observe(element);
     window.addEventListener('resize', update);
-    update();
-    return () => { observer.disconnect(); window.removeEventListener('resize', update); };
+    measure();
+    return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener('resize', update); };
   }, []);
+
+  useEffect(() => {
+    turning.current = false;
+    window.clearTimeout(flipTimer.current);
+    setFlip(null);
+  }, [leaves, columns]);
 
   useEffect(() => () => window.clearTimeout(flipTimer.current), []);
 
@@ -64,6 +79,7 @@ export const AdaptiveReader = forwardRef<AdaptiveReaderHandle, {
   const navigate = (target: number) => {
     if (!leaves.length) return;
     window.clearTimeout(flipTimer.current);
+    turning.current = false;
     setFlip(null);
     const leaf = leaves[Math.min(Math.max(0, target), leaves.length - 1)];
     onNavigate({ source: leaf.source, offset: leaf.offset });
@@ -71,9 +87,11 @@ export const AdaptiveReader = forwardRef<AdaptiveReaderHandle, {
   };
 
   const turn = (direction: 'next' | 'previous') => {
-    if (flip || !leaves.length) return;
+    if (turning.current || flip || !leaves.length) return;
     const target = Math.min(Math.max(0, index + (direction === 'next' ? columns : -columns)), last);
     if (target === index) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { navigate(target); return; }
+    turning.current = true;
     const frontIndex = direction === 'next' ? Math.min(index + columns - 1, leaves.length - 1) : index;
     // The reverse of a leaf is the first page of the next spread, or the last
     // page of the preceding spread when turning backwards.
@@ -81,13 +99,14 @@ export const AdaptiveReader = forwardRef<AdaptiveReaderHandle, {
     const token = Date.now();
     setFlip({ direction, front: leaves[frontIndex], back: leaves[backIndex], from: index, to: target, token });
     window.clearTimeout(flipTimer.current);
-    flipTimer.current = window.setTimeout(() => setFlip(current => current?.token === token ? null : current), 900);
+    flipTimer.current = window.setTimeout(() => { turning.current = false; setFlip(current => current?.token === token ? null : current); }, 650);
     const targetLeaf = leaves[target];
     onNavigate({ source: targetLeaf.source, offset: targetLeaf.offset });
   };
   useImperativeHandle(ref, () => ({ turn }));
 
   const finishFlip = (token: number) => {
+    turning.current = false;
     window.clearTimeout(flipTimer.current);
     setFlip(current => current?.token === token ? null : current);
   };
@@ -106,8 +125,40 @@ export const AdaptiveReader = forwardRef<AdaptiveReaderHandle, {
   const rightIndex = flip ? (flip.direction === 'next' ? flip.to + 1 : flip.from + 1) : index + 1;
   const style = { '--leaf-height': `${leafHeight}px`, '--reader-font-size': `${fontSize}px`, '--reader-line-width': lineWidth, '--reader-text-width': `${textWidth}px` } as import('react').CSSProperties;
 
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+
+    // Only recognize horizontal swipes if horizontal movement dominates vertical scroll
+    if (Math.abs(deltaX) > 42 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
+      if (deltaX < 0) {
+        turn('next');
+      } else {
+        turn('previous');
+      }
+    }
+  };
+
   return <div ref={container} className="library-adaptive-reader" style={style}>
-    <div className={`library-book-spread${columns === 1 ? ' is-single-page' : ''}${flip ? ` turn-${flip.direction}` : ''}`} data-reader-theme={theme}>
+    <div
+      className={`library-book-spread${columns === 1 ? ' is-single-page' : ''}${flip ? ` turn-${flip.direction}` : ''}`}
+      data-reader-theme={theme}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="library-spread-static" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         <PageSheet page={leaves[leftIndex]} number={leftIndex + 1} side="left" onImageOpen={!flip && leaves[leftIndex]?.pageImage ? () => enlargePage(leaves[leftIndex]) : undefined} />
         {columns === 2 && <PageSheet page={leaves[rightIndex]} number={rightIndex + 1} side="right" onImageOpen={!flip && leaves[rightIndex]?.pageImage ? () => enlargePage(leaves[rightIndex]) : undefined} />}
