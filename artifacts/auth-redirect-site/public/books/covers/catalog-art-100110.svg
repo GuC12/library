@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900" role="img" aria-label="Tess of the d&apos;Urbervilles: A Pure Woman — Thomas Hardy">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#302319"/><stop offset=".55" stop-color="#73532f"/><stop offset="1" stop-color="#302319"/></linearGradient>
+    <linearGradient id="foil" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff2d9"/><stop offset=".52" stop-color="#e4c47d"/><stop offset="1" stop-color="#fff2d9"/></linearGradient>
+    <radialGradient id="light"><stop stop-color="#e4c47d" stop-opacity=".23"/><stop offset="1" stop-color="#302319" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#paper)"/>
+  <path d="M0 570 Q130 480 250 555 T600 515 V900 H0Z" fill="url(#light)"/>
+  <path d="M0 90 Q150 30 300 90 T600 72 M0 815 Q150 755 300 815 T600 795" fill="none" stroke="#e4c47d" stroke-opacity=".18" stroke-width="2"/>
+  <rect x="24" y="24" width="552" height="852" rx="4" fill="none" stroke="url(#foil)" stroke-width="2"/>
+  <rect x="34" y="34" width="532" height="832" rx="3" fill="none" stroke="#e4c47d" stroke-opacity=".36"/>
+  <path d="M48 84 Q78 48 108 84 M492 84 Q522 48 552 84 M48 816 Q78 852 108 816 M492 816 Q522 852 552 816" fill="none" stroke="#e4c47d" stroke-width="2"/>
+  <path d="M66 110 H534" stroke="#e4c47d" stroke-opacity=".45"/>
+  <text x="300" y="94" text-anchor="middle" fill="#fff2d9" font-family="Georgia,serif" font-size="13" letter-spacing="2.5">ДЕТСКАЯ ЛИТЕРАТУРА</text>
+  <text x="300" y="194" text-anchor="middle" fill="#e4c47d" font-family="Georgia,serif" font-size="14" letter-spacing="4">EN · CLASSIC EDITION</text>
+  <text x="300" y="256" text-anchor="middle" fill="#fff2d9" font-family="Georgia,'Times New Roman',serif" font-size="36" font-weight="700"><tspan x="300" dy="0">Tess of the d&apos;Urbervilles: A</tspan><tspan x="300" dy="39">Pure Woman</tspan></text>
+  <path d="M145 438 Q220 423 300 438 T455 438" fill="none" stroke="#e4c47d" stroke-opacity=".65" stroke-width="2"/>
+  <g>
+    <path d="M65 677 Q175 602 275 663 Q380 584 535 667 V738 H65Z" fill="#73532f"/>
+    <path d="M172 643 Q195 584 240 600 Q276 618 260 658 Q236 685 193 671Z" fill="#e4c47d"/>
+    <path d="M188 628 Q207 617 216 633 M232 630 Q248 618 255 635 M199 654 Q220 670 243 653" fill="none" stroke="#73532f" stroke-width="5"/>
+    <path d="M360 682 V548 M360 563 Q306 554 326 511 Q360 518 369 550 Q390 506 428 516 Q428 556 369 568" fill="#fff2d9" opacity=".85"/>
+    <path d="M65 710 Q170 685 280 712 T535 709" fill="none" stroke="#e4c47d" stroke-width="4"/></g>
+  <path d="M145 754 Q220 740 300 754 T455 754" fill="none" stroke="#e4c47d" stroke-opacity=".65" stroke-width="2"/>
+  <text x="300" y="792" text-anchor="middle" fill="#fff2d9" font-family="Georgia,'Times New Roman',serif" font-size="23" font-weight="600"><tspan x="300" dy="0">Thomas Hardy</tspan></text>
+  <text x="300" y="834" text-anchor="middle" fill="#e4c47d" font-family="Georgia,serif" font-size="10" letter-spacing="3">LIBRARY EDITION</text>
+  <title>Tess of the d&apos;Urbervilles: A Pure Woman — Thomas Hardy. Темы из каталога источника: Children of clergy -- Fiction; Children of the rich -- Fiction; Di</title>
+</svg>

@@ -1,0 +1,2 @@
+-- Superseded: apply supabase-setup.sql.
+-- This legacy entry point intentionally does not recreate public reading-list policies.

@@ -4,12 +4,23 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "books:import": "node scripts/import-gutenberg.mjs 645",
+    "books:import-next": "node scripts/import-russian-classics.mjs && node scripts/import-gutenberg.mjs 645",
+    "books:prepare-verified": "node scripts/prepare-500-catalogue.mjs",
+    "books:import-three-sisters": "node scripts/import-three-sisters.mjs",
+    "books:import-crime-and-punishment": "node scripts/import-crime-and-punishment.mjs",
+    "books:import-war-and-peace": "node scripts/import-war-and-peace.mjs",
+    "books:verify": "node scripts/verify-catalogue.mjs",
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
+    "build:pages": "vite build --config vite.config.ts && node scripts/prepare-pages.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test scripts/*.test.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:prepare": "node scripts/build-supabase-setup.mjs"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",
@@ -58,6 +69,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "catalog:",
     "next-themes": "^0.4.6",
+    "parse5": "^8.0.1",
     "react": "catalog:",
     "react-day-picker": "^9.11.1",
     "react-dom": "catalog:",

@@ -29,11 +29,11 @@ export interface UserProfileData {
 }
 
 export function getUserNicknameKey(userId?: string): string {
-  return userId ? `library_user_nickname_${userId}` : 'library_user_nickname';
+  return userId ? `library_user_nickname_${userId}` : 'library_guest_nickname';
 }
 
 export function getUserAvatarKey(userId?: string): string {
-  return userId ? `library_user_avatar_${userId}` : 'library_user_avatar';
+  return userId ? `library_user_avatar_${userId}` : 'library_guest_avatar';
 }
 
 export function getStoredProfile(clerkUser?: ReturnType<typeof useUser>['user']): UserProfileData {
@@ -42,18 +42,11 @@ export function getStoredProfile(clerkUser?: ReturnType<typeof useUser>['user'])
   const userId = clerkUser?.id;
 
   if (typeof window !== 'undefined') {
-    // Сначала пробуем ключ с привязкой к аккаунту
-    if (userId) {
+    // Never reuse the legacy shared cache: its account owner is unknown.
+    try {
       nickname = window.localStorage.getItem(getUserNicknameKey(userId)) || '';
       avatar = window.localStorage.getItem(getUserAvatarKey(userId)) || '';
-    }
-    // Если пусто — fallback на старый общий ключ (для обратной совместимости)
-    if (!nickname) {
-      nickname = window.localStorage.getItem('library_user_nickname') || '';
-    }
-    if (!avatar) {
-      avatar = window.localStorage.getItem('library_user_avatar') || '';
-    }
+    } catch { /* Use the current account's defaults when storage is unavailable. */ }
   }
 
   if (!nickname) {
@@ -76,16 +69,10 @@ export function saveStoredProfile(profile: Partial<UserProfileData>, userId?: st
 
   try {
     if (profile.nickname !== undefined) {
-      if (userId) {
-        window.localStorage.setItem(getUserNicknameKey(userId), profile.nickname);
-      }
-      window.localStorage.setItem('library_user_nickname', profile.nickname);
+      window.localStorage.setItem(getUserNicknameKey(userId), profile.nickname);
     }
     if (profile.avatar !== undefined) {
-      if (userId) {
-        window.localStorage.setItem(getUserAvatarKey(userId), profile.avatar);
-      }
-      window.localStorage.setItem('library_user_avatar', profile.avatar);
+      window.localStorage.setItem(getUserAvatarKey(userId), profile.avatar);
     }
   } catch (err) {
     console.warn('LocalStorage save error (possibly quota):', err);
@@ -100,7 +87,11 @@ export function saveStoredProfile(profile: Partial<UserProfileData>, userId?: st
 
 export function useUserProfile() {
   const { user, isLoaded } = useUser();
-  const [profile, setProfile] = useState<UserProfileData>(() => getStoredProfile(user));
+  const ownerId = user?.id ?? null;
+  const [storedProfile, setStoredProfile] = useState(() => ({ ownerId, data: getStoredProfile(user) }));
+  // Mask stale state during render, before effects run after logout/account changes.
+  const profile = storedProfile.ownerId === ownerId ? storedProfile.data : getStoredProfile(user);
+  const setProfile = (data: UserProfileData) => setStoredProfile({ ownerId, data });
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const remoteLoadedForRef = useRef<string | null>(null);
@@ -108,6 +99,9 @@ export function useUserProfile() {
   // Синхронизация локального состояния при смене Clerk user
   useEffect(() => {
     if (!user?.id) {
+      remoteLoadedForRef.current = null;
+      setIsLoadingRemote(false);
+      setIsSaving(false);
       setProfile(getStoredProfile(user));
       return;
     }
@@ -146,8 +140,9 @@ export function useUserProfile() {
         if (!isMounted) return;
 
         if (remote) {
-          const cloudNickname = remote.nickname || profile.nickname;
-          const cloudAvatar = remote.avatar || profile.avatar || DEFAULT_AVATAR;
+          const fallback = getStoredProfile(user);
+          const cloudNickname = remote.nickname || fallback.nickname;
+          const cloudAvatar = remote.avatar || fallback.avatar || DEFAULT_AVATAR;
 
           const updated: UserProfileData = {
             nickname: cloudNickname,
@@ -178,8 +173,9 @@ export function useUserProfile() {
             });
 
             const stats = getStoredReadingStats();
+            const existingReader = await fetchRemoteReader(userId);
             await upsertRemoteReader(
-              readerRecordFromStats(userId, initialNickname, initialAvatar, stats, 0)
+              { ...readerRecordFromStats(userId, initialNickname, initialAvatar, stats, 0), readingLists: existingReader?.readingLists }
             );
           } catch (initErr) {
             console.warn('Initial profile sync warning:', initErr);
@@ -211,7 +207,7 @@ export function useUserProfile() {
   useEffect(() => {
     const handleProfileChange = (event: Event) => {
       const customEvent = event as CustomEvent<{ userId?: string; nickname?: string; avatar?: string }>;
-      if (customEvent.detail && customEvent.detail.userId && user?.id && customEvent.detail.userId !== user.id) {
+      if ((customEvent.detail?.userId ?? null) !== (user?.id ?? null)) {
         return;
       }
       setProfile(getStoredProfile(user));
@@ -268,8 +264,9 @@ export function useUserProfile() {
 
       // Обновляем статистику читателя
       const stats = getStoredReadingStats();
+      const existingReader = await fetchRemoteReader(user.id);
       await upsertRemoteReader(
-        readerRecordFromStats(user.id, trimmedNick, finalAvatar, stats, 0)
+        { ...readerRecordFromStats(user.id, trimmedNick, finalAvatar, stats, 0), readingLists: existingReader?.readingLists }
       );
 
       // Обновляем автора на книгах пользователя

@@ -1,18 +1,22 @@
-import { ClerkProvider, useAuth, useClerk } from '@clerk/react';
+import { ClerkProvider, useAuth, useClerk, useSession, useUser } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
+import { DailyReaderVisit } from '@/components/reader-journey';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { LanguageProvider, useLanguage } from '@/lib/i18n';
-import { HomePage } from '@/pages/home';
-import { SignInPage, SignUpPage } from '@/pages/auth-pages';
-import { UserPortalPage } from '@/pages/user-portal';
-import { LibraryPage } from '@/pages/library';
-import NotFound from '@/pages/not-found';
+import { setSupabaseAccessTokenProvider } from '@/lib/supabase';
+
+const HomePage = lazy(() => import('@/pages/home').then(module => ({ default: module.HomePage })));
+const SignInPage = lazy(() => import('@/pages/auth-pages').then(module => ({ default: module.SignInPage })));
+const SignUpPage = lazy(() => import('@/pages/auth-pages').then(module => ({ default: module.SignUpPage })));
+const UserPortalPage = lazy(() => import('@/pages/user-portal').then(module => ({ default: module.UserPortalPage })));
+const LibraryPage = lazy(() => import('@/pages/library').then(module => ({ default: module.LibraryPage })));
+const NotFound = lazy(() => import('@/pages/not-found'));
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -29,7 +33,7 @@ const clerkAppearance = {
   options: {
     logoPlacement: 'inside' as const,
     logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/favicon-book.png`,
+    logoImageUrl: `${window.location.origin}${basePath}/library-brand.svg`,
     socialButtonsPlacement: 'top' as const,
     socialButtonsVariant: 'blockButton' as const,
   },
@@ -88,8 +92,9 @@ function UserPortalRoute() {
 
 function LibraryRoute() {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   if (!isLoaded) return <AuthLoadingState />;
-  return isSignedIn ? <LibraryPage /> : <Redirect to="/sign-in" />;
+  return isSignedIn ? <LibraryPage key={user?.id ?? 'signed-in'} /> : <Redirect to="/sign-in" />;
 }
 
 function AuthLoadingState() {
@@ -119,6 +124,17 @@ function LogoutReset() {
     });
     return unsubscribe;
   }, [addListener, queryClientInstance]);
+
+  return null;
+}
+
+function SupabaseClerkSessionBridge() {
+  const { session } = useSession();
+
+  useLayoutEffect(() => {
+    setSupabaseAccessTokenProvider(session ? () => session.getToken() : null);
+    return () => setSupabaseAccessTokenProvider(null);
+  }, [session]);
 
   return null;
 }
@@ -158,16 +174,20 @@ function ClerkProviderWithRoutes() {
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
     >
       <QueryClientProvider client={queryClient}>
+        <SupabaseClerkSessionBridge />
+        <DailyReaderVisit />
         <LogoutReset />
         <RoutedErrorBoundary>
-          <Switch>
-            <Route path="/" component={HomePage} />
-            <Route path="/sign-in/*?" component={SignInPage} />
-            <Route path="/sign-up/*?" component={SignUpPage} />
-            <Route path="/user-portal" component={UserPortalRoute} />
-            <Route path="/library" component={LibraryRoute} />
-            <Route component={NotFound} />
-          </Switch>
+          <Suspense fallback={<AuthLoadingState />}>
+            <Switch>
+              <Route path="/" component={HomePage} />
+              <Route path="/sign-in/*?" component={SignInPage} />
+              <Route path="/sign-up/*?" component={SignUpPage} />
+              <Route path="/user-portal" component={UserPortalRoute} />
+              <Route path="/library" component={LibraryRoute} />
+              <Route component={NotFound} />
+            </Switch>
+          </Suspense>
         </RoutedErrorBoundary>
       </QueryClientProvider>
     </ClerkProvider>

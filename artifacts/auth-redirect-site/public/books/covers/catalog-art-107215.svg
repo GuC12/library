@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900" role="img" aria-label="鄧析子 — Xi Deng">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101b2b"/><stop offset=".55" stop-color="#304c5d"/><stop offset="1" stop-color="#101b2b"/></linearGradient>
+    <linearGradient id="foil" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f3e8cf"/><stop offset=".52" stop-color="#d7b875"/><stop offset="1" stop-color="#f3e8cf"/></linearGradient>
+    <radialGradient id="light"><stop stop-color="#d7b875" stop-opacity=".23"/><stop offset="1" stop-color="#101b2b" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#paper)"/>
+  <path d="M0 570 Q130 480 250 555 T600 515 V900 H0Z" fill="url(#light)"/>
+  <path d="M0 90 Q150 30 300 90 T600 72 M0 815 Q150 755 300 815 T600 795" fill="none" stroke="#d7b875" stroke-opacity=".18" stroke-width="2"/>
+  <rect x="24" y="24" width="552" height="852" rx="4" fill="none" stroke="url(#foil)" stroke-width="2"/>
+  <rect x="34" y="34" width="532" height="832" rx="3" fill="none" stroke="#d7b875" stroke-opacity=".36"/>
+  <path d="M48 84 Q78 48 108 84 M492 84 Q522 48 552 84 M48 816 Q78 852 108 816 M492 816 Q522 852 552 816" fill="none" stroke="#d7b875" stroke-width="2"/>
+  <path d="M66 110 H534" stroke="#d7b875" stroke-opacity=".45"/>
+  <text x="300" y="94" text-anchor="middle" fill="#f3e8cf" font-family="Georgia,serif" font-size="13" letter-spacing="2.5">ФИЛОСОФИЯ</text>
+  <text x="300" y="194" text-anchor="middle" fill="#d7b875" font-family="Georgia,serif" font-size="14" letter-spacing="4">ZH · CLASSIC EDITION</text>
+  <text x="300" y="256" text-anchor="middle" fill="#f3e8cf" font-family="Georgia,'Times New Roman',serif" font-size="36" font-weight="700"><tspan x="300" dy="0">鄧析子</tspan></text>
+  <path d="M145 438 Q220 423 300 438 T455 438" fill="none" stroke="#d7b875" stroke-opacity=".65" stroke-width="2"/>
+  <g>
+    <path d="M92 565 L300 465 L508 565Z" fill="#d7b875"/>
+    <path d="M112 576 H488 M130 581 V692 M210 581 V692 M290 581 V692 M370 581 V692 M450 581 V692 M112 698 H488" stroke="#f3e8cf" stroke-width="7"/>
+    <path d="M72 717 H528" stroke="#d7b875" stroke-width="5"/>
+    <path d="M270 460 V410 M240 435 H300" stroke="#f3e8cf" stroke-width="4"/></g>
+  <path d="M145 754 Q220 740 300 754 T455 754" fill="none" stroke="#d7b875" stroke-opacity=".65" stroke-width="2"/>
+  <text x="300" y="792" text-anchor="middle" fill="#f3e8cf" font-family="Georgia,'Times New Roman',serif" font-size="23" font-weight="600"><tspan x="300" dy="0">Xi Deng</tspan></text>
+  <text x="300" y="834" text-anchor="middle" fill="#d7b875" font-family="Georgia,serif" font-size="10" letter-spacing="3">LIBRARY EDITION</text>
+  <title>鄧析子 — Xi Deng. Темы из каталога источника: Philosophy, Chinese.</title>
+</svg>

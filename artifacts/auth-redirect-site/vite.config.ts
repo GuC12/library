@@ -50,6 +50,19 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, 'dist/public'),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('/node_modules/')) return;
+          if (id.includes('/@clerk/')) return 'auth-vendor';
+          if (id.includes('/@supabase/')) return 'database-vendor';
+          if (id.includes('/@tanstack/')) return 'query-vendor';
+          if (id.includes('/lucide-react/')) return 'icons-vendor';
+          if (id.includes('/@radix-ui/')) return 'ui-vendor';
+          if (/\/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react-vendor';
+        },
+      },
+    },
   },
   server: {
     port,

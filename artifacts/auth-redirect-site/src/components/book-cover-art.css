@@ -48,6 +48,15 @@
 .book-cover-original.is-compact .book-cover-shop-divider { font-size: 8px; }
 .book-cover-edition { background: var(--cover-tone, #244638); }
 .book-cover-edition .book-cover-original-image { object-fit: contain; }
+.book-cover-artwork-lettering { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 14px; background: linear-gradient(180deg, rgba(7,13,17,.58), transparent 38%, transparent 48%, rgba(7,13,17,.89)); text-shadow: 0 2px 4px rgba(0,0,0,.88); }
+.book-cover-artwork-copy { display: grid; gap: 7px; }
+.book-cover-artwork-lettering .book-cover-art-category { background: rgba(8,14,20,.78); }
+.book-cover-artwork-lettering .book-cover-art-title { font-size: clamp(13px, 1.15vw, 19px); line-height: 1.12; }
+.book-cover-artwork-lettering .book-cover-art-author { font-size: 10px; }
+.book-cover-edition:has(.book-cover-artwork-lettering) .book-cover-original-image { object-fit: cover; }
+.book-cover-art.is-compact .book-cover-artwork-lettering { padding: 11px; }
+.book-cover-art.is-compact .book-cover-artwork-lettering .book-cover-art-title { font-size: 16px; }
+.book-cover-art.is-compact .book-cover-artwork-lettering .book-cover-art-author { font-size: 9px; }
 .book-cover-edition.book-cover-art-back .book-cover-art-content { justify-content: center; }
 .book-cover-edition.book-cover-art-back .book-cover-art-category { display: none; }
 .book-cover-edition.book-cover-art-back .book-cover-art-title { font-size: 18px; }

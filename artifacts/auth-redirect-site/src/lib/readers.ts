@@ -5,6 +5,7 @@ import {
   readerRecordFromStats,
   xpForBookPages,
   type ReaderRecord,
+  type SharedReadingLists,
   type ReadingStats,
 } from './reading-system';
 import { fetchRemoteReader, fetchRemoteReaders, upsertRemoteReader } from './supabase';
@@ -175,11 +176,12 @@ export interface CurrentReaderInput {
   avatar: string;
   booksPublished: number;
   stats?: ReadingStats;
+  readingLists?: SharedReadingLists;
 }
 
 export function buildCurrentReader(input: CurrentReaderInput): ReaderRecord {
   const stats = input.stats ?? getStoredReadingStats();
-  return readerRecordFromStats(input.userId, input.nickname, input.avatar, stats, input.booksPublished);
+  return { ...readerRecordFromStats(input.userId, input.nickname, input.avatar, stats, input.booksPublished), readingLists: input.readingLists };
 }
 
 /** Считает опыт автора по его собственным книгам (для показа прогресса). */
@@ -206,13 +208,15 @@ export interface LoadLeaderboardInput {
  */
 export async function loadLeaderboard(input: LoadLeaderboardInput): Promise<ReaderRecord[]> {
   const remoteReaders = (await fetchRemoteReaders()).filter((reader) => hasAccountId(reader));
-  const currentReader = input.currentUserId
+  const currentReader = input.currentUserId && !remoteReaders.some(reader => reader.id === input.currentUserId)
     ? [buildCurrentReader({
         userId: input.currentUserId,
         nickname: input.currentNickname,
         avatar: input.currentAvatar,
         booksPublished: input.booksPublished,
-        stats: input.stats,
+        // Until the server profile is available, never advertise a local
+        // client-supplied XP balance as authenticated leaderboard progress.
+        stats: { ...input.stats, xp: 0, level: 1, pagesRead: 0, booksFinished: 0 },
       })]
     : [];
 
@@ -235,15 +239,25 @@ export async function syncCurrentReader(input: CurrentReaderInput): Promise<Read
     ...record,
     nickname: record.nickname && record.nickname !== 'Читатель' ? record.nickname : (remote.nickname || record.nickname),
     avatar: record.avatar || remote.avatar || '',
-    xp: Math.max(record.xp, remote.xp),
-    level: calculateLevel(Math.max(record.xp, remote.xp)).level,
-    pagesRead: Math.max(record.pagesRead, remote.pagesRead),
-    booksFinished: Math.max(record.booksFinished, remote.booksFinished),
+    // Authenticated progress is authoritative on the server. Local XP is
+    // retained for guest mode only and must never be uploaded as a balance.
+    xp: remote.xp,
+    level: remote.level,
+    pagesRead: remote.pagesRead,
+    booksFinished: remote.booksFinished,
+    streakDays: remote.streakDays,
     booksPublished: Math.max(record.booksPublished, remote.booksPublished),
+    readingLists: input.readingLists ?? remote.readingLists,
   } : record;
   if (!(await upsertRemoteReader(merged))) throw new Error('Не удалось сохранить читателя в Supabase');
-  upsertLocalReader(merged);
-  return merged;
+  const authoritative = await fetchRemoteReader(input.userId);
+  if (!authoritative) throw new Error('Не удалось загрузить статистику читателя из Supabase');
+  const saved = { ...merged, xp: authoritative.xp, level: authoritative.level,
+    pagesRead: authoritative.pagesRead, booksFinished: authoritative.booksFinished,
+    streakDays: authoritative.streakDays, booksPublished: authoritative.booksPublished,
+    readingLists: input.readingLists ?? authoritative.readingLists };
+  upsertLocalReader(saved);
+  return saved;
 }
 
 export { calculateLevel };

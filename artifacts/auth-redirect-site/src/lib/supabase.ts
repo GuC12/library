@@ -1,11 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Book, BookPage } from '@/data/books';
-import type { ReaderRecord } from './reading-system';
+import type { ReaderRecord, SharedReadingListItem, SharedReadingLists } from './reading-system';
+import { createId } from './create-id';
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let clerkAccessToken: (() => Promise<string | null>) | null = null;
+
+/** Connects the shared Supabase client to the current Clerk session. */
+export function setSupabaseAccessTokenProvider(provider: (() => Promise<string | null>) | null) {
+  clerkAccessToken = provider;
+}
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  accessToken: async () => (clerkAccessToken ? clerkAccessToken() : null),
+});
 
 const BOOKS_TABLE = 'community_books';
 const READERS_TABLE = 'reader_stats';
@@ -54,6 +64,7 @@ export function rowToBook(row: CommunityBookRow): Book {
     pages: readPages(row.pages),
     isUserBook: true,
     likesCount: Number(row.likes_count) || 0,
+    publicationStatus: 'published',
   };
 }
 
@@ -76,45 +87,111 @@ export function bookToRow(book: Book): CommunityBookRow {
   };
 }
 
-export async function fetchRemoteBooks(): Promise<Book[]> {
-  try {
-    const { data, error } = await supabase
-      .from(BOOKS_TABLE)
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.warn('Supabase fetch error:', error.message);
-      return [];
-    }
-
-    return (data || []).map((row) => rowToBook(row as CommunityBookRow));
-  } catch (err) {
-    console.warn('Failed to fetch books from Supabase:', err);
-    return [];
+export async function fetchRemoteBooks(ownerId?: string): Promise<Book[]> {
+  const books: Book[] = [];
+  for (let from = 0; ; from += 100) {
+    const { data, error } = await supabase.from(BOOKS_TABLE).select('*')
+      .order('id', { ascending: false }).range(from, from + 99);
+    if (error) throw new Error(error.message);
+    books.push(...(data || []).map(row => rowToBook(row as CommunityBookRow)));
+    if (!data || data.length < 100) break;
   }
+  if (ownerId) {
+    for (let index = 0; index < books.length; index++) {
+      const book = books[index];
+      if (book.ownerId !== ownerId || !book.coverImage?.startsWith('data:image/')) continue;
+      try {
+        const coverImage = await migrateInlineBookCover(book.coverImage, ownerId);
+        const migrated = { ...book, coverImage };
+        if (await updateRemoteBook(migrated)) books[index] = migrated;
+      } catch (error) {
+        console.warn('Could not migrate a legacy book cover yet:', error);
+      }
+    }
+  }
+  return books;
 }
 
-export async function saveRemoteBook(book: Book): Promise<boolean> {
+export async function reportCommunityBook(book: Book, reporterId: string, reason: string): Promise<boolean> {
+  const trimmedReason = reason.trim().slice(0, 1000);
+  if (!reporterId || !trimmedReason) return false;
+  const { error } = await supabase.from('content_reports').insert({
+    reporter_id: reporterId,
+    content_type: 'book',
+    content_id: String(book.id),
+    content_title: book.title.slice(0, 200),
+    reason: trimmedReason,
+  });
+  if (error) {
+    console.error('Book report submit error:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function deleteMyLibraryData(): Promise<void> {
+  const { error } = await supabase.rpc('delete_my_library_data');
+  if (error) throw new Error(error.message);
+}
+
+export interface RemoteReadingAward {
+  xp: number;
+  level: number;
+  streakDays: number;
+  pagesRead: number;
+  gainedXp: number;
+  awardedPages: number;
+}
+
+/** Awards authenticated reading activity through the idempotent server ledger. */
+export async function awardRemoteReadingPages(bookId: number, pageIndexes: number[]): Promise<RemoteReadingAward> {
+  const uniquePages = [...new Set(pageIndexes.filter(page => Number.isSafeInteger(page) && page >= 0))];
+  if (!uniquePages.length) return { xp: 0, level: 1, streakDays: 1, pagesRead: 0, gainedXp: 0, awardedPages: 0 };
+  const { data, error } = await supabase.rpc('award_reading_pages', { p_book_id: bookId, p_page_indexes: uniquePages });
+  if (error) throw new Error(error.message);
+  if (!data || typeof data !== 'object') throw new Error('Invalid reading award response');
+  const result = data as RemoteReadingAward;
+  if (![result.xp, result.level, result.streakDays, result.pagesRead, result.gainedXp, result.awardedPages].every(Number.isFinite)) {
+    throw new Error('Invalid reading award response');
+  }
+  if (result.awardedPages > 0) window.dispatchEvent(new Event('library-reading-awarded'));
+  return result;
+}
+
+export type BookSaveResult = { ok: true } | { ok: false; message: string };
+
+function bookSyncError(error: unknown): string {
+  const detail = error as { code?: string; message?: string } | null;
+  const code = detail?.code || '';
+  const message = detail?.message || '';
+  if (code === '42501') return 'Облако отклонило запись: проверьте права community_books и подключение Clerk в Supabase.';
+  if (['PGRST301', 'PGRST302', 'PGRST303'].includes(code) || /jwt|token.*expired/i.test(message)) return 'Сессия не принята облаком. Выйдите и войдите в аккаунт снова.';
+  if (['42P01', '42703', 'PGRST204', 'PGRST205', '42883'].includes(code)) return 'В облачной базе не хватает таблицы, поля или функции. Нужно проверить SQL-настройку проекта.';
+  if (/fetch|network|offline/i.test(message)) return 'Нет связи с облаком. Повторим отправку после восстановления соединения.';
+  return `Облако не приняло книгу${code ? ` (код ${code})` : ''}. Подробности ошибки записаны в консоль браузера.`;
+}
+
+export async function saveRemoteBook(book: Book): Promise<BookSaveResult> {
   try {
-    const { error } = await supabase.from(BOOKS_TABLE).insert(bookToRow(book));
+    if (book.coverImage?.startsWith('data:image/')) throw new Error('Legacy inline cover must be migrated before publishing');
+    const { error } = await supabase.from(BOOKS_TABLE).upsert(bookToRow(book), { onConflict: 'id' });
     if (error) {
-      console.error('Supabase insert error:', error.message);
-      return false;
+      console.error('Supabase insert error:', error);
+      return { ok: false, message: bookSyncError(error) };
     }
-    return true;
+    return { ok: true };
   } catch (err) {
     console.error('Failed to save book to Supabase:', err);
-    return false;
+    return { ok: false, message: bookSyncError(err) };
   }
 }
 
 export async function updateRemoteBook(book: Book): Promise<boolean> {
   try {
+    if (book.coverImage?.startsWith('data:image/')) throw new Error('Legacy inline cover must be migrated before publishing');
     const { error } = await supabase
       .from(BOOKS_TABLE)
-      .update(bookToRow(book))
-      .eq('id', book.id);
+      .upsert(bookToRow(book), { onConflict: 'id' });
     if (error) {
       console.error('Supabase update error:', error.message);
       return false;
@@ -235,16 +312,18 @@ export async function fetchFriends(userId: string): Promise<FriendProfile[]> {
 }
 
 export async function addFriend(userId: string, friendId: string): Promise<boolean> {
-  const { error } = await supabase.from(FRIENDS_TABLE).upsert({ user_id: userId, friend_id: friendId, status: 'pending' }, { onConflict: 'user_id,friend_id' });
+  const { error } = await supabase.from(FRIENDS_TABLE).upsert(
+    { user_id: userId, friend_id: friendId, status: 'pending' },
+    { onConflict: 'user_id,friend_id', ignoreDuplicates: true }
+  );
   if (error) throw new Error(error.message);
   return true;
 }
 
 export async function acceptFriendRequest(requestId: number, userId: string, senderId: string): Promise<boolean> {
-  const { error } = await supabase.from(FRIENDS_TABLE).update({ status: 'accepted' }).eq('id', requestId).eq('friend_id', userId);
+  void senderId; // The database reads the sender from the pending request itself.
+  const { error } = await supabase.rpc('accept_friend_request', { p_request_id: requestId });
   if (error) throw new Error(error.message);
-  const reverse = await supabase.from(FRIENDS_TABLE).upsert({ user_id: userId, friend_id: senderId, status: 'accepted' }, { onConflict: 'user_id,friend_id' });
-  if (reverse.error) throw new Error(reverse.error.message);
   return true;
 }
 
@@ -263,11 +342,12 @@ export async function removeFriend(userId: string, friendId: string): Promise<bo
 export async function fetchChatMessages(userId: string, friendId: string): Promise<ChatMessage[]> {
   const { data, error } = await supabase.from(MESSAGES_TABLE).select('*').or(`and(sender_id.eq.${userId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${userId})`).order('created_at', { ascending: false }).limit(200);
   if (error) throw new Error(error.message);
-  return [...((data || []) as ChatMessage[])].reverse().map((message) => {
+  return Promise.all([...((data || []) as ChatMessage[])].reverse().map(async (message) => {
     const body = message.body || '';
     const isPhotoOnly = /^((https?:\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?[^\s]*)?)|(data:image\/[^;]+;base64,[\s\S]+))$/i.test(body);
-    return isPhotoOnly ? { ...message, body: '', attachment_url: body } : message;
-  });
+    const normalized = isPhotoOnly ? { ...message, body: '', attachment_url: body } : message;
+    return { ...normalized, attachment_url: await resolveChatPhoto(normalized.attachment_url) };
+  }));
 }
 
 export async function sendChatMessage(senderId: string, receiverId: string, body: string, attachmentUrl?: string): Promise<ChatMessage> {
@@ -278,68 +358,81 @@ export async function sendChatMessage(senderId: string, receiverId: string, body
     body: messageBody || (attachmentUrl ? '📷' : ''),
     attachment_url: attachmentUrl || null,
   }).select('*').single();
-  if (error) {
-    // Текстовые сообщения остаются совместимыми со старой схемой.
-    const legacy = await supabase.from(MESSAGES_TABLE).insert({
-      sender_id: senderId,
-      receiver_id: receiverId,
-      body: messageBody || attachmentUrl || '📷',
-    }).select('*').single();
-    if (legacy.error) throw new Error(legacy.error.message);
-    return { ...(legacy.data as ChatMessage), attachment_url: attachmentUrl || null };
-  }
-  return data as ChatMessage;
+  if (error) throw new Error(error.message);
+  const message = data as ChatMessage;
+  return { ...message, attachment_url: await resolveChatPhoto(message.attachment_url) };
 }
 
-export async function uploadChatPhoto(file: File, userId: string): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new Error('photo-type-not-supported');
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-') || 'photo.jpg';
-  const uniqueId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const path = `${userId}/${uniqueId}-${safeName}`;
-  const uploaded = await supabase.storage.from('chat-photos').upload(path, file, { contentType: file.type, upsert: false });
-  if (!uploaded.error) {
-    const { data } = supabase.storage.from('chat-photos').getPublicUrl(path);
-    return data.publicUrl;
-  }
+async function resolveChatPhoto(value?: string | null): Promise<string | null> {
+  if (!value) return null;
+  let path: string;
+  if (value.startsWith('chat-photos/')) path = value.slice('chat-photos/'.length);
+  else if (value.startsWith(SUPABASE_URL + '/storage/v1/object/public/chat-photos/')) {
+    path = decodeURIComponent(value.slice((SUPABASE_URL + '/storage/v1/object/public/chat-photos/').length));
+  } else return value; // Existing external images and legacy inline photos.
+  const { data, error } = await supabase.storage.from('chat-photos').createSignedUrl(path, 300);
+  if (error) return null; // A failed permission check must never fall back to a public URL.
+  return data.signedUrl;
+}
 
-  // Если Storage ещё не настроен, отправляем небольшую сжатую копию.
-  // Это временный fallback: после применения supabase-schema.sql будет использоваться Storage.
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error(uploaded.error?.message || 'photo-read-error'));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error('photo-decode-error'));
-      image.onload = () => {
-        // В старой схеме body ограничен 4000 символами. Сжимаем fallback так,
-        // чтобы фото всё равно прошло даже без attachment_url и Storage bucket.
-        let size = 128;
-        let result = '';
-        while (size >= 16) {
-          const scale = Math.min(1, size / Math.max(image.width, image.height));
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.round(image.width * scale));
-          canvas.height = Math.max(1, Math.round(image.height * scale));
-          canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
-          result = canvas.toDataURL('image/jpeg', 0.12);
-          if (result.length <= 3000) break;
-          size -= 8;
-        }
-        if (!result || result.length > 3900) reject(new Error('photo-too-large'));
-        else resolve(result);
-      };
-      image.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
+export async function uploadChatPhoto(file: File, userId: string, receiverId: string): Promise<string> {
+  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) throw new Error('photo-type-not-supported');
+  if (file.size > 5 * 1024 * 1024) throw new Error('photo-too-large');
+  const extension = file.type.split('/')[1];
+  const path = userId + '/' + receiverId + '/' + createId() + '.' + extension;
+  const { error } = await supabase.storage.from('chat-photos').upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error(error.message);
+  return 'chat-photos/' + path;
+}
+
+export async function uploadBookIllustration(file: File, userId: string): Promise<string> {
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(file.type)) throw new Error('illustration-type-not-supported');
+  if (file.size > 5 * 1024 * 1024) throw new Error('illustration-too-large');
+
+  const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const uniqueId = createId();
+  const path = `${userId}/${uniqueId}.${extension}`;
+  const { error } = await supabase.storage.from('book-illustrations').upload(path, file, {
+    contentType: file.type,
+    cacheControl: '31536000',
+    upsert: false,
   });
+  if (error) throw new Error(error.message);
+  return supabase.storage.from('book-illustrations').getPublicUrl(path).data.publicUrl;
+}
+
+/** Moves a legacy data URL into Storage after validating type and bucket size. */
+export async function migrateInlineBookCover(value: string, userId: string): Promise<string> {
+  if (!value.startsWith('data:image/')) return value;
+  const response = await fetch(value);
+  const blob = await response.blob();
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(blob.type)) throw new Error('cover-type-not-supported');
+  let storedBlob = blob;
+  if (blob.size > 5 * 1024 * 1024) {
+    const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, 1800 / bitmap.width, 2600 / bitmap.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('cover-compression-failed');
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    storedBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(result => result ? resolve(result) : reject(new Error('cover-compression-failed')), 'image/webp', 0.82);
+    });
+  }
+  if (storedBlob.size > 5 * 1024 * 1024) throw new Error('cover-too-large');
+  const extension = storedBlob.type === 'image/jpeg' ? 'jpg' : storedBlob.type === 'image/png' ? 'png' : 'webp';
+  return uploadBookIllustration(new File([storedBlob], `legacy-cover.${extension}`, { type: storedBlob.type }), userId);
 }
 
 export async function updateChatMessage(messageId: number, userId: string, body: string): Promise<ChatMessage> {
   const { data, error } = await supabase.from(MESSAGES_TABLE).update({ body }).eq('id', messageId).eq('sender_id', userId).select('*').single();
   if (error) throw new Error(error.message);
-  return data as ChatMessage;
+  const message = data as ChatMessage;
+  return { ...message, attachment_url: await resolveChatPhoto(message.attachment_url) };
 }
 
 export async function deleteChatMessage(messageId: number, userId: string): Promise<boolean> {
@@ -364,6 +457,28 @@ export interface ReaderStatsRow {
   books_finished: number;
   books_published: number;
   updated_at?: string;
+}
+
+interface ReaderListsRow {
+  owner_id: string;
+  want: unknown;
+  reading: unknown;
+  done: unknown;
+  updated_at?: string;
+}
+
+function readSharedReadingLists(value: unknown): SharedReadingLists | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const data = value as Record<string, unknown>;
+  const readItems = (items: unknown): SharedReadingListItem[] => Array.isArray(items)
+    ? items.flatMap((item) => {
+        if (!item || typeof item !== 'object') return [];
+        const candidate = item as Partial<SharedReadingListItem>;
+        if (!Number.isFinite(candidate.bookId) || typeof candidate.title !== 'string') return [];
+        return [{ bookId: Number(candidate.bookId), title: candidate.title, author: typeof candidate.author === 'string' ? candidate.author : '', summary: typeof candidate.summary === 'string' ? candidate.summary : '' }];
+      })
+    : [];
+  return { want: readItems(data.want), reading: readItems(data.reading), done: readItems(data.done) };
 }
 
 export function rowToReader(row: ReaderStatsRow): ReaderRecord {
@@ -396,6 +511,29 @@ export function readerToRow(reader: ReaderRecord): ReaderStatsRow {
   };
 }
 
+async function fetchReaderLists(userId: string): Promise<SharedReadingLists | undefined> {
+  const { data, error } = await supabase
+    .from('friend_reading_lists')
+    .select('owner_id,want,reading,done')
+    .eq('owner_id', userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return undefined;
+  const row = data as ReaderListsRow;
+  return readSharedReadingLists({ want: row.want, reading: row.reading, done: row.done });
+}
+
+async function saveReaderLists(userId: string, lists: SharedReadingLists): Promise<void> {
+  const { error } = await supabase.from('friend_reading_lists').upsert({
+    owner_id: userId,
+    want: lists.want,
+    reading: lists.reading,
+    done: lists.done,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'owner_id' });
+  if (error) throw new Error(error.message);
+}
+
 /** Читает реальные аккаунты сайта. Если таблицы ещё нет — вернёт пустой список. */
 export async function fetchRemoteReaders(): Promise<ReaderRecord[]> {
   try {
@@ -421,10 +559,19 @@ export async function fetchRemoteReaders(): Promise<ReaderRecord[]> {
   }
 }
 
-export async function fetchRemoteReader(userId: string): Promise<ReaderRecord | null> {
+export async function fetchRemoteReader(userId: string, options: { requireReadingLists?: boolean } = {}): Promise<ReaderRecord | null> {
   const { data, error } = await supabase.from(READERS_TABLE).select('*').eq('id', userId).maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? rowToReader(data as ReaderStatsRow) : null;
+  if (!data) return null;
+  const reader = rowToReader(data as ReaderStatsRow);
+  try {
+    reader.readingLists = await fetchReaderLists(userId);
+  } catch (listsError) {
+    if (options.requireReadingLists) throw listsError;
+    // A private reading-list policy or a missing optional table must not hide XP/profile stats.
+    console.warn('Could not load reader lists; keeping profile stats:', listsError);
+  }
+  return reader;
 }
 
 export async function toggleBookLike(bookId: number, userId: string, liked: boolean): Promise<boolean> {
@@ -461,8 +608,18 @@ export async function fetchBookLikes(bookIds: number[], userId?: string): Promis
 
 export async function upsertRemoteReader(reader: ReaderRecord): Promise<boolean> {
   try {
-    const { error } = await supabase.from(READERS_TABLE).upsert(readerToRow(reader), { onConflict: 'id' });
+    // XP and reading totals are server-owned. Only profile fields are written
+    // by this client; column grants also enforce this boundary in Postgres.
+    const row = {
+      id: reader.id,
+      nickname: reader.nickname,
+      avatar: reader.avatar,
+      books_published: reader.booksPublished,
+      updated_at: new Date(reader.updatedAt || Date.now()).toISOString(),
+    };
+    const { error } = await supabase.from(READERS_TABLE).upsert(row, { onConflict: 'id' });
     if (error) throw new Error(error.message);
+    if (reader.readingLists) await saveReaderLists(reader.id, reader.readingLists);
     return true;
   } catch (error) {
     console.warn('Не удалось сохранить читателя:', error);
@@ -470,41 +627,3 @@ export async function upsertRemoteReader(reader: ReaderRecord): Promise<boolean>
   }
 }
 
-/* legacy implementation kept below for compatibility */
-/*
-export async function fetchRemoteReaders(): Promise<ReaderRecord[]> {
-  try {
-    const { data, error } = await supabase
-      .from(READERS_TABLE)
-      .select('*')
-      .order('xp', { ascending: false })
-      .limit(100);
-
-    if (error) {
-      console.warn('Supabase readers fetch error:', error.message);
-      return [];
-    }
-
-    return (data || []).map((row) => rowToReader(row as ReaderStatsRow));
-  } catch (err) {
-    console.warn('Failed to fetch readers from Supabase:', err);
-    return [];
-  }
-}
-
-export async function upsertRemoteReader(reader: ReaderRecord): Promise<boolean> {
-  try {
-    const { error } = await supabase
-      .from(READERS_TABLE)
-      .upsert(readerToRow(reader), { onConflict: 'id' });
-    if (error) {
-      console.warn('Supabase reader upsert error:', error.message);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.warn('Failed to sync reader stats to Supabase:', err);
-    return false;
-  }
-}
-*/

@@ -1,21 +1,35 @@
+import { ReaderAchievements, type ReaderJourney } from '@/components/reader-journey';
+import { useReaderSync } from '@/hooks/use-reader-sync';
+import { ReaderNoteHistory } from '@/components/reader-note-history';
+import { reconcileCommunityBooks, removeSyncedRevisions } from '@/lib/community-sync';
 import { PageSheet } from '@/components/book-page-sheet';
+import { AdaptiveReader, type AdaptiveReaderHandle } from '@/components/adaptive-reader';
 import { loadBookPages } from '@/lib/book-text';
 import { catalogueCopy } from '@/data/catalogue-copy';
 import { LibraryBrandIcon } from '@/components/library-brand-icon';
 import { useClerk, useUser } from '@clerk/react';
 import {
   Award,
+  Bold,
   Bookmark,
   Camera,
   Check,
   ChevronLeft,
   ChevronRight,
   Flame,
+  Heading2,
   Heart,
+  ImagePlus,
+  Italic,
   MessageCircle,
   LogOut,
+  Minus,
+  Moon,
+  Plus,
   PlusCircle,
+  Quote,
   RefreshCw,
+  Flag,
   RotateCcw,
   RotateCw,
   Search,
@@ -29,18 +43,20 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { books, initialUserBooks, isLegacyDemoBook, type Book, type BookPage } from '@/data/books';
 import { quotes } from '@/data/quotes';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { useLanguage } from '@/lib/i18n';
 import { DEFAULT_AVATAR, useUserProfile } from '@/lib/user-profile';
+import { clearAccountLocalData } from '@/lib/account-storage';
 import { Interactive3DBook } from '@/components/interactive-3d-book';
 import { BookCoverArt, getBookArtwork } from '@/components/book-cover-art';
 import { LibraryGuide } from '@/components/library-guide';
 import { guideCopy } from '@/data/library-guide';
 import {
   addReadingXp,
+  awardUniqueReadingPages,
   calculateLevel,
   getStoredReadingStats,
   saveStoredReadingStats,
@@ -52,7 +68,9 @@ import { loadLeaderboard, syncCurrentReader } from '@/lib/readers';
 import type { ReaderRecord } from '@/lib/reading-system';
 
 import {
+  awardRemoteReadingPages,
   deleteRemoteBook,
+  deleteMyLibraryData,
   fetchBookLikes,
   acceptFriendRequest,
   rejectFriendRequest,
@@ -62,18 +80,20 @@ import {
   fetchRemoteBooks,
   fetchRemoteReader,
   findRemoteProfileByNickname,
+  migrateInlineBookCover,
   addFriend,
   removeFriend,
   rowToBook,
   saveRemoteProfile,
   sendChatMessage,
   uploadChatPhoto,
+  uploadBookIllustration,
   updateChatMessage,
   deleteChatMessage,
   saveRemoteBook,
   supabase,
   toggleBookLike,
-  updateRemoteBook,
+  reportCommunityBook,
 } from '@/lib/supabase';
 import './library.css';
 
@@ -94,7 +114,16 @@ const COMMUNITY_SUBCATEGORIES = [
 ] as const;
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-const PAGE_TURN_MS = 780;
+type BookSort = 'catalog' | 'title' | 'author' | 'year' | 'popular';
+type ReaderTheme = 'paper' | 'night';
+type ReaderWidth = 'narrow' | 'medium' | 'wide';
+type ReadingStatus = 'want' | 'reading' | 'done';
+const sortCopy = {
+  ru: { label: 'Сортировка', catalog: 'Порядок каталога', title: 'Название: А—Я', author: 'Автор: А—Я', year: 'Сначала новые', popular: 'Сначала популярные', smaller: 'Уменьшить шрифт', larger: 'Увеличить шрифт', paper: 'Светлая страница', night: 'Тёмная страница', resume: 'Продолжить с', page: 'стр.', continue: 'Продолжить чтение' },
+  en: { label: 'Sort by', catalog: 'Catalog order', title: 'Title: A—Z', author: 'Author: A—Z', year: 'Newest first', popular: 'Most popular', smaller: 'Decrease text size', larger: 'Increase text size', paper: 'Light page', night: 'Dark page', resume: 'Continue from', page: 'p.', continue: 'Continue reading' },
+  kk: { label: 'Сұрыптау', catalog: 'Каталог реті', title: 'Атауы: А—Я', author: 'Автор: А—Я', year: 'Жаңалары алдымен', popular: 'Танымалдары алдымен', smaller: 'Қаріпті кішірейту', larger: 'Қаріпті үлкейту', paper: 'Ашық бет', night: 'Қараңғы бет', resume: 'Жалғастыру:', page: 'бет', continue: 'Оқуды жалғастыру' },
+  zh: { label: '排序', catalog: '目录顺序', title: '书名：A—Z', author: '作者：A—Z', year: '最新优先', popular: '热门优先', smaller: '缩小字体', larger: '放大字体', paper: '浅色页面', night: '深色页面', resume: '从此页继续', page: '页', continue: '继续阅读' },
+} as const;
 
 type BookmarkEntry = {
   title: string;
@@ -179,6 +208,7 @@ const readStorage = <T,>(key: string, fallback: T): T => {
     return fallback;
   }
 };
+const accountStorageKey = (key: string, userId?: string) => `${key}:${userId || 'guest'}`;
 
 function BookCover({ book, small = false, categoryLabels }: { book: Book; small?: boolean; categoryLabels: Record<string, string> }) {
   const translatedCategory = categoryLabels[book.category] || book.category;
@@ -187,6 +217,23 @@ function BookCover({ book, small = false, categoryLabels }: { book: Book; small?
       <div className={`library-book-cover library-photo-cover ${small ? 'library-book-cover-small' : ''}`}
         style={{ '--spine-color': book.spine } as CSSProperties}>
         <BookCoverArt book={book} compact={small} categoryLabel={translatedCategory} />
+      </div>
+    );
+  }
+
+  if (book.coverKind === 'edition' && book.coverImage) {
+    return (
+      <div
+        className={`library-book-cover library-edition-cover ${small ? 'library-book-cover-small' : ''}`}
+        style={{ '--spine-color': book.spine } as CSSProperties}
+      >
+        <img
+          className="library-edition-cover-image"
+          src={book.coverImage}
+          alt={`${book.title} — ${book.author}, обложка издания${book.publicationYear ? ` ${book.publicationYear} года` : ''}`}
+          loading="lazy"
+          decoding="async"
+        />
       </div>
     );
   }
@@ -245,6 +292,7 @@ export function LibraryPage() {
   const { signOut } = useClerk();
   const { t, language } = useLanguage();
   const catalogText = catalogueCopy[language];
+  const readerControls = sortCopy[language];
   const { nickname, avatar, updateProfile, saveAvatarFile, resetAvatar, isSaving: isProfileSaving } = useUserProfile();
 
   const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * quotes.length));
@@ -262,39 +310,63 @@ export function LibraryPage() {
   const currentQuote = quotes[quoteIndex] ?? quotes[0];
   const [guideOpenRequest, setGuideOpenRequest] = useState(0);
   const [query, setQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<BookSort>(() => readStorage<BookSort>('library-sort-order', 'catalog'));
+  const [visibleBookCount, setVisibleBookCount] = useState(24);
   const [category, setCategory] = useState('all');
+  const [readingListFilter, setReadingListFilter] = useState<'all' | ReadingStatus>('all');
   useEffect(() => { setCategory('all'); }, [language]);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [readerTab, setReaderTab] = useState<'summary' | 'full'>('summary');
   const [readerError, setReaderError] = useState(false);
   const [readerRetry, setReaderRetry] = useState(0);
-  const [jumpPage, setJumpPage] = useState('');
   useEffect(() => {
     let active = true;
     setReaderError(false);
-    if (selectedBook?.textPath && !selectedBook.pages.length) {
+    if (readerTab === 'full' && selectedBook?.textPath && !selectedBook.pages.length) {
       const requestedBook = selectedBook;
       loadBookPages(requestedBook).then((pages) => {
         if (active) setSelectedBook((current) => current?.id === requestedBook.id ? { ...current, pages } : current);
       }).catch(() => { if (active) setReaderError(true); });
     }
     return () => { active = false; };
-  }, [selectedBook?.id, readerRetry]);
+  }, [selectedBook?.id, readerTab, readerRetry]);
 
   const [pageIndex, setPageIndex] = useState(0);
-  const [isTurning, setIsTurning] = useState(false);
-  const [turnDirection, setTurnDirection] = useState<'next' | 'previous'>('next');
-  const [turningTo, setTurningTo] = useState<number | null>(null);
-  const turnTimer = useRef<number | null>(null);
-  const [cart, setCart] = useState<number[]>(() => readStorage<number[]>('library-cart', []));
+  const [readerOffset, setReaderOffset] = useState(0);
+  const [visibleReaderSources, setVisibleReaderSources] = useState<number[]>([]);
+  const adaptiveReaderRef = useRef<AdaptiveReaderHandle>(null);
+  const syncVisibleReaderSources = useCallback((sources: number[]) => {
+    setVisibleReaderSources(current => current.length === sources.length && current.every((source, index) => source === sources[index]) ? current : sources);
+  }, []);
+  const explicitReaderStart = useRef(false);
+  const readerSync = useReaderSync(user?.id || 'guest');
+  const { progress: readingProgress, bookmarks, notes: readerNotes } = readerSync;
+  const [readerFontSize, setReaderFontSize] = useState(() => {
+    const stored = readStorage<number>('library-reader-font-size', 17);
+    return Number.isFinite(stored) ? Math.max(15, Math.min(23, stored)) : 17;
+  });
+  const [readerTheme, setReaderTheme] = useState<ReaderTheme>(() => readStorage<ReaderTheme>('library-reader-theme', 'paper') === 'night' ? 'night' : 'paper');
+  const [readerWidth, setReaderWidth] = useState<ReaderWidth>(() => {
+    const stored = readStorage<ReaderWidth>('library-reader-width', 'medium');
+    return ['narrow', 'medium', 'wide'].includes(stored) ? stored : 'medium';
+  });
+  const [readerSearchOpen, setReaderSearchOpen] = useState(false);
+  const [readerSearchQuery, setReaderSearchQuery] = useState('');
+  const [cart, setCart] = useState<number[]>(() => readStorage<number[]>(accountStorageKey('library-cart', user?.id), []));
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [orderSubmitted, setOrderSubmitted] = useState(false);
-  const [bookmarks, setBookmarks] = useState<Record<string, BookmarkEntry>>(() => readStorage<Record<string, BookmarkEntry>>('library-bookmarks', {}));
+  const [readingStatuses, setReadingStatuses] = useState<Record<string, ReadingStatus>>(() => {
+    const stored = readStorage<Record<string, unknown>>(accountStorageKey('library-reading-statuses', user?.id), {});
+    return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, ReadingStatus] => ['want', 'reading', 'done'].includes(String(entry[1]))));
+  });
+  const [readingListsHydrated, setReadingListsHydrated] = useState(false);
   const [bookLikes, setBookLikes] = useState<Record<number, number>>({});
   const [likedBooks, setLikedBooks] = useState<number[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [profileReadingTab, setProfileReadingTab] = useState<ReadingStatus>('want');
+  const [profileReadingVisibleCount, setProfileReadingVisibleCount] = useState(12);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -308,24 +380,14 @@ export function LibraryPage() {
   const [selectedFriend, setSelectedFriend] = useState<import('@/lib/supabase').FriendProfile | null>(null);
   const [viewedProfile, setViewedProfile] = useState<import('@/lib/supabase').FriendProfile | null>(null);
   const [viewedFriendStats, setViewedFriendStats] = useState<ReaderRecord | null>(null);
+  const [viewedFriendListTab, setViewedFriendListTab] = useState<ReadingStatus>('want');
+  const [viewedFriendProfileLoading, setViewedFriendProfileLoading] = useState(false);
   const [messages, setMessages] = useState<import('@/lib/supabase').ChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const chatMessagesRef = useRef<HTMLDivElement | null>(null);
   const [editingBookId, setEditingBookId] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
-
-  useEffect(() => {
-    const bookParam = new URLSearchParams(window.location.search).get('book');
-    if (bookParam) {
-      const found = books.find((b) => String(b.id) === bookParam);
-      if (found) {
-        setSelectedBook(found);
-        setPageIndex(0);
-        setReaderTab('full');
-      }
-    }
-  }, []);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -365,6 +427,8 @@ export function LibraryPage() {
     setNewSpine(book.spine);
     setNewCover(book.coverImage || '');
     setNewPages(book.pages);
+    setPreviewPageIndex(null);
+    setRightsConfirmed(false);
     setUploadModalOpen(true);
   };
   const [levelUpBanner, setLevelUpBanner] = useState<string | null>(null);
@@ -374,11 +438,20 @@ export function LibraryPage() {
 
   // Система опыта чтения и серии дней
   const [readingStats, setReadingStats] = useState<ReadingStats>(() => getStoredReadingStats());
+  const [statsOwnerId, setStatsOwnerId] = useState<string | null>(null);
+  // Prevent overlapping animations from rapid taps, keyboard repeats, and double-clicks.
+  const pageIndexRef = useRef(pageIndex);
+  const setReaderPage = (index: number) => {
+    pageIndexRef.current = index;
+    setPageIndex(index);
+    setReaderOffset(0);
+  };
 
   useEffect(() => {
-    if (!user?.id) return;
-    setActiveReaderId(user.id);
+    const readerId = user?.id ?? null;
+    setActiveReaderId(readerId);
     setReadingStats(getStoredReadingStats());
+    setStatsOwnerId(readerId);
     return () => setActiveReaderId(null);
   }, [user?.id]);
 
@@ -386,7 +459,8 @@ export function LibraryPage() {
     const handleStatsChange = (e: Event) => {
       const customEvent = e as CustomEvent<ReadingStats>;
       if (customEvent.detail) {
-        setReadingStats(customEvent.detail);
+        const xp = Number.isFinite(customEvent.detail.xp) ? Math.max(0, customEvent.detail.xp) : 0;
+        setReadingStats({ ...customEvent.detail, xp, level: calculateLevel(xp).level });
       } else {
         setReadingStats(getStoredReadingStats());
       }
@@ -396,7 +470,18 @@ export function LibraryPage() {
   }, []);
 
   // Подкатегории по языкам и тематике книг сообщества.
-  const [subLang, setSubLang] = useState<'all' | 'ru' | 'en' | 'kk' | 'zh'>('all');
+  useEffect(() => {
+    const update = (event: Event) => {
+      const { userId, journey } = (event as CustomEvent<{ userId: string; journey: ReaderJourney }>).detail;
+      if (userId !== user?.id || statsOwnerId !== userId) return;
+      setReadingStats(current => saveStoredReadingStats({ ...current, xp: journey.xp, level: journey.level,
+        pagesRead: journey.pagesRead, streakDays: journey.streakDays }));
+    };
+    window.addEventListener('library-journey-changed', update);
+    return () => window.removeEventListener('library-journey-changed', update);
+  }, [user?.id, statsOwnerId]);
+
+  const [subLang, setSubLang] = useState<string>('all');
   const [communitySubcategory, setCommunitySubcategory] = useState('all');
 
   // Пользовательские книги (синхронизируются с облачной базой Supabase в реальном времени)
@@ -406,84 +491,193 @@ export function LibraryPage() {
     const merged = [...stored, ...initialUserBooks.filter((b) => !storedIds.has(b.id))];
     return merged;
   });
-
-  // Загрузка настоящих книг из Supabase + подписка на добавления в реальном времени
-  useEffect(() => {
-    let isMounted = true;
-
-    // 1. Первичная загрузка из облака
-    fetchRemoteBooks().then((remoteBooks) => {
-      if (!isMounted || !remoteBooks.length) return;
-      setUserBooks((prev) => {
-        const existingIds = new Set(prev.map((b) => b.id));
-        const newFromRemote = remoteBooks.filter((b) => !existingIds.has(b.id));
-        if (!newFromRemote.length) return prev;
-        const merged = [...newFromRemote, ...prev];
-        window.localStorage.setItem('library-user-books', JSON.stringify(merged));
-        return merged;
-      });
+  const pendingBookSyncKey = accountStorageKey('library-pending-book-sync', user?.id);
+  const [pendingBookSyncState, setPendingBookSyncState] = useState(() => ({
+    key: pendingBookSyncKey,
+    books: readStorage<Book[]>(pendingBookSyncKey, []),
+  }));
+  const pendingCloudBooks = pendingBookSyncState.key === pendingBookSyncKey
+    ? pendingBookSyncState.books
+    : readStorage<Book[]>(pendingBookSyncKey, []);
+  const setPendingCloudBooks: React.Dispatch<React.SetStateAction<Book[]>> = (update) => {
+    setPendingBookSyncState(current => {
+      const currentBooks = current.key === pendingBookSyncKey ? current.books : readStorage<Book[]>(pendingBookSyncKey, []);
+      return { key: pendingBookSyncKey, books: typeof update === 'function' ? update(currentBooks) : update };
     });
-
-    // 2. Realtime подписка на добавление новых книг от любых пользователей через Supabase
-    const channel = supabase
-      .channel('realtime:community_books')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'community_books' },
-        (payload) => {
-          if (!isMounted || !payload.new) return;
-          const newBook = rowToBook(payload.new as any);
-          setUserBooks((prev) => {
-            if (prev.some((b) => b.id === newBook.id)) return prev;
-            const updated = [newBook, ...prev];
-            window.localStorage.setItem('library-user-books', JSON.stringify(updated));
+  };
+  const pendingBooksRef = useRef(pendingCloudBooks);
+  pendingBooksRef.current = pendingCloudBooks;
+  const [bookSyncRevision, setBookSyncRevision] = useState(0);
+  const bookUploads = useRef(new Map<number, ReturnType<typeof saveRemoteBook>>());
+  const deletingBooks = useRef(new Set<number>());
+  useEffect(() => {
+    setPendingBookSyncState(current => current.key === pendingBookSyncKey
+      ? current
+      : { key: pendingBookSyncKey, books: readStorage<Book[]>(pendingBookSyncKey, []) });
+  }, [pendingBookSyncKey]);
+  useEffect(() => {
+    if (pendingBookSyncState.key !== pendingBookSyncKey) return;
+    try { window.localStorage.setItem(pendingBookSyncKey, JSON.stringify(pendingCloudBooks)); }
+    catch { setNotice(t('storageSaveError')); }
+  }, [pendingBookSyncKey, pendingBookSyncState.key, pendingCloudBooks, t]);
+  useEffect(() => {
+    let stopped = false;
+    const sync = async () => {
+      if (!user?.id || !navigator.onLine) return;
+      for (const book of pendingBooksRef.current) {
+        if (stopped) return;
+        if (book.ownerId !== user.id || deletingBooks.current.has(book.id) || bookUploads.current.has(book.id)) continue;
+        let uploadBook = book;
+        if (book.coverImage?.startsWith('data:image/')) {
+          try {
+            uploadBook = { ...book, coverImage: await migrateInlineBookCover(book.coverImage, user.id) };
+            setPendingCloudBooks(current => current.map(item => item === book ? uploadBook : item));
+            setUserBooks(current => {
+              const updated = current.map(item => item.id === uploadBook.id && item.ownerId === user.id ? uploadBook : item);
+              try { window.localStorage.setItem('library-user-books', JSON.stringify(updated)); } catch { /* Cloud migration can still finish. */ }
+              return updated;
+            });
+          } catch (error) {
+            console.warn('Could not migrate a pending book cover yet:', error);
+            setNotice(t('coverMigrationPending'));
+            continue;
+          }
+        }
+        setUserBooks(current => current.map(item => item.id === book.id && item.ownerId === user.id
+          ? { ...item, publicationStatus: 'publishing' as const } : item));
+        const upload = saveRemoteBook(uploadBook);
+        bookUploads.current.set(book.id, upload);
+        const result = await upload;
+        bookUploads.current.delete(book.id);
+        if (stopped) return;
+        if (result.ok) {
+          setUserBooks(current => {
+            const updated = current.map(item => item.id === uploadBook.id && item.ownerId === user.id
+              ? { ...item, publicationStatus: 'published' as const } : item);
+            try { window.localStorage.setItem('library-user-books', JSON.stringify(updated)); } catch { /* Cloud remains authoritative. */ }
             return updated;
           });
-        }
-      )
-      .subscribe();
-
-    // 3. Локальные события между соседними вкладками браузера
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'library-user-books' && e.newValue) {
-        try {
-          const updated = JSON.parse(e.newValue) as Book[];
-          const updatedIds = new Set(updated.map((b) => b.id));
-          const merged = [...updated, ...initialUserBooks.filter((b) => !updatedIds.has(b.id))];
-          setUserBooks(merged);
-        } catch {
-          // ignore
+          if (statsOwnerId === user.id) {
+            try {
+              const remote = await fetchRemoteReader(user.id);
+              if (!stopped && remote && statsOwnerId === user.id) {
+                setReadingStats(current => saveStoredReadingStats({ ...current, xp: remote.xp, level: remote.level,
+                  streakDays: remote.streakDays, pagesRead: remote.pagesRead, booksFinished: remote.booksFinished }));
+              }
+            } catch (error) { console.warn('Не удалось обновить опыт после публикации:', error); }
+          }
+          setPendingCloudBooks(current => removeSyncedRevisions(current, [uploadBook]));
+          setNotice(t('bookPublished'));
+        } else {
+          setPendingCloudBooks(current => current.map(item => item.id === uploadBook.id ? { ...item, publicationStatus: 'failed' } : item));
+          setUserBooks(current => {
+            const updated = current.map(item => item.id === uploadBook.id && item.ownerId === user.id ? { ...item, publicationStatus: 'failed' as const } : item);
+            try { window.localStorage.setItem('library-user-books', JSON.stringify(updated)); } catch { /* Keep the in-memory retry available. */ }
+            return updated;
+          });
+          setNotice(`Книга сохранена на этом устройстве. ${result.message}`);
         }
       }
     };
+    void sync();
+    const interval = window.setInterval(sync, 30000);
+    window.addEventListener('online', sync);
+    return () => { stopped = true; window.clearInterval(interval); window.removeEventListener('online', sync); };
+  }, [bookSyncRevision, statsOwnerId, user?.id, t]);
 
-    const handleLocalBroadcast = () => {
-      const stored = readStorage<Book[]>('library-user-books', []).filter((book) => !isLegacyDemoBook(book));
-      const storedIds = new Set(stored.map((b) => b.id));
-      const merged = [...stored, ...initialUserBooks.filter((b) => !storedIds.has(b.id))];
-      setUserBooks(merged);
+  useEffect(() => {
+    let mounted = true;
+    let generation = 0;
+    const refresh = async () => {
+      const request = ++generation;
+      try {
+        const remote = await fetchRemoteBooks(user?.id);
+        if (!mounted || request !== generation) return;
+        const next = reconcileCommunityBooks(remote, pendingBooksRef.current, user?.id || '');
+        setUserBooks(next);
+        try { window.localStorage.setItem('library-user-books', JSON.stringify(next)); } catch { /* Cloud remains authoritative. */ }
+      } catch {
+        if (mounted && request === generation) setNotice(t('catalogLoadError'));
+      }
     };
-
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('library-user-books-updated', handleLocalBroadcast);
-
+    void refresh();
+    const channel = supabase.channel('realtime:community_books')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'community_books' }, refresh).subscribe();
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', refresh);
     return () => {
-      isMounted = false;
-      supabase.removeChannel(channel);
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('library-user-books-updated', handleLocalBroadcast);
+      mounted = false;
+      void supabase.removeChannel(channel);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', refresh);
     };
-  }, []);
+  }, [user?.id, t]);
 
   const allBooks = useMemo(() => {
     const featuredTitles = new Set(books.slice(0, 2).map((book) => book.title.trim().toLocaleLowerCase()));
     const otherUserBooks = userBooks.filter((book) => !isLegacyDemoBook(book) && !featuredTitles.has(book.title.trim().toLocaleLowerCase()));
     return [...books.slice(0, 2), ...otherUserBooks, ...books.slice(2)];
   }, [userBooks]);
+  useEffect(() => {
+    let active = true;
+    let loading = false;
+    setReadingListsHydrated(false);
+    if (!user?.id) {
+      setReadingListsHydrated(true);
+      return () => { active = false; };
+    }
+    const loadLists = () => {
+      if (loading) return;
+      loading = true;
+      fetchRemoteReader(user.id, { requireReadingLists: true }).then((reader) => {
+        if (!active) return;
+        const lists = reader?.readingLists;
+        if (lists) {
+          const next: Record<string, ReadingStatus> = {};
+          for (const status of ['want', 'reading', 'done'] as const) {
+            for (const item of lists[status] || []) next[String(item.bookId)] = status;
+          }
+          setReadingStatuses(next);
+        }
+        setReadingListsHydrated(true);
+      }).catch((error) => {
+        console.warn('Could not load reading lists before sync:', error);
+        // A failed cloud read must not overwrite the current local list.
+      }).finally(() => { loading = false; });
+    };
+    loadLists();
+    window.addEventListener('online', loadLists);
+    return () => { active = false; window.removeEventListener('online', loadLists); };
+  }, [user?.id]);
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    const bookParam = new URLSearchParams(window.location.search).get('book');
+    if (!bookParam || deepLinkHandled.current) return;
+    const found = allBooks.find((book) => String(book.id) === bookParam);
+    if (!found) return;
+    deepLinkHandled.current = true;
+    setSelectedBook(found);
+    setReaderPage(0);
+    setReaderTab('full');
+  }, [allBooks]);
   const categoryLabels: Record<string, string> = {
     'Пользовательские книги': t('categoryCommunity'),
     'Художественная литература': t('categoryFiction'),
-    'Философия': catalogText.philosophy,
+    'Классика': t('genreClassics'),
+    'Познавательная литература': t('genreEducational'),
+    'Казахская литература': t('genreKazakhLit'),
+    'Русская литература': t('genreRussianLit'),
+    'Детективы': t('genreMystery'),
+    'Фэнтези': t('genreFantasy'),
+    'Научная фантастика': t('genreScienceFiction'),
+    'Приключения': t('genreAdventure'),
+    'Любовные романы': t('genreRomance'),
+    'Поэзия': t('genrePoetry'),
+    'Драма и пьесы': t('genreDrama'),
+    'Историческая проза': t('genreHistorical'),
+    'Философия': t('genrePhilosophy'),
+    'Детская литература': t('genreChildren'),
+    'Путешествия': t('genreTravel'),
     Основы: t('categoryBasics'),
     Архитектура: t('categoryArchitecture'),
     Алгоритмы: t('categoryAlgorithms'),
@@ -503,6 +697,26 @@ export function LibraryPage() {
     [t('categoryLanguages')]: t('categoryLanguages'),
   };
   const ownBooks = useMemo(() => userBooks.filter((book) => book.ownerId === user?.id), [userBooks, user?.id]);
+  const readingListCounts = useMemo(() => ({
+    all: allBooks.filter((book) => readingStatuses[String(book.id)]).length,
+    want: allBooks.filter((book) => readingStatuses[String(book.id)] === 'want').length,
+    reading: allBooks.filter((book) => readingStatuses[String(book.id)] === 'reading').length,
+    done: allBooks.filter((book) => readingStatuses[String(book.id)] === 'done').length,
+  }), [allBooks, readingStatuses]);
+  const sharedReadingLists = useMemo(() => ({
+    want: allBooks.filter((book) => readingStatuses[String(book.id)] === 'want').map(({ id, title, author, summary }) => ({ bookId: id, title, author, summary })),
+    reading: allBooks.filter((book) => readingStatuses[String(book.id)] === 'reading').map(({ id, title, author, summary }) => ({ bookId: id, title, author, summary })),
+    done: allBooks.filter((book) => readingStatuses[String(book.id)] === 'done').map(({ id, title, author, summary }) => ({ bookId: id, title, author, summary })),
+  }), [allBooks, readingStatuses]);
+
+  const updateReadingStatus = (bookId: number, status: string) => {
+    setReadingStatuses((current) => {
+      const next = { ...current };
+      if (status === 'want' || status === 'reading' || status === 'done') next[String(bookId)] = status;
+      else delete next[String(bookId)];
+      return next;
+    });
+  };
 
   const addFriendByNickname = async () => {
     if (!user?.id || !friendSearch.trim()) return;
@@ -552,9 +766,9 @@ export function LibraryPage() {
   };
 
   const handleChatPhoto = async (file?: File) => {
-    if (!file || !user?.id) return;
+    if (!file || !user?.id || !selectedFriend) return;
     try {
-      const url = await uploadChatPhoto(file, user.id);
+      const url = await uploadChatPhoto(file, user.id, selectedFriend.user_id);
       await sendMessage(url);
     } catch (error) {
       console.error('Chat photo upload failed:', error);
@@ -569,29 +783,48 @@ export function LibraryPage() {
 
   const persistUserBooks = (updated: Book[]) => {
     setUserBooks(updated);
-    window.localStorage.setItem('library-user-books', JSON.stringify(updated));
+    try { window.localStorage.setItem('library-user-books', JSON.stringify(updated)); } catch { setNotice(t('storageSaveError')); }
     window.dispatchEvent(new Event('library-user-books-updated'));
   };
 
   const deleteOwnBook = async (book: Book) => {
-    if (book.ownerId !== user?.id || !window.confirm(t('deleteBookConfirm'))) return;
-    persistUserBooks(userBooks.filter((item) => item.id !== book.id));
-    await deleteRemoteBook(book.id);
-    setNotice(t('bookDeleted'));
-    window.setTimeout(() => setNotice(''), 2200);
+    if (book.ownerId !== user?.id || deletingBooks.current.has(book.id) || !window.confirm(t('deleteBookConfirm'))) return;
+    deletingBooks.current.add(book.id);
+    try {
+      await bookUploads.current.get(book.id);
+      if (!(await deleteRemoteBook(book.id))) throw new Error('delete-failed');
+      setPendingCloudBooks(current => current.filter(item => item.id !== book.id));
+      setUserBooks(current => {
+        const next = current.filter(item => item.id !== book.id);
+        try { window.localStorage.setItem('library-user-books', JSON.stringify(next)); } catch { /* Cloud deletion succeeded. */ }
+        return next;
+      });
+      setNotice(t('bookDeleted'));
+    } catch { setNotice(t('bookDeleteError')); }
+    finally { deletingBooks.current.delete(book.id); }
+    window.setTimeout(() => setNotice(''), 3500);
   };
 
   useEffect(() => {
-    if (!user?.id) return;
-    syncCurrentReader({ userId: user.id, nickname, avatar, booksPublished: ownBooks.length, stats: readingStats })
+    // Clerk can change accounts before account-scoped stats have loaded.
+    // Never upload the previous render's XP to the newly active account.
+    if (!user?.id || statsOwnerId !== user.id || !readingListsHydrated) return;
+    let active = true;
+    syncCurrentReader({ userId: user.id, nickname, avatar, booksPublished: ownBooks.length, stats: readingStats, readingLists: sharedReadingLists })
       .then((record) => {
-        if (record.xp > readingStats.xp) {
-          const updated = saveStoredReadingStats({ ...readingStats, xp: record.xp, level: record.level, pagesRead: record.pagesRead });
-          setReadingStats(updated);
-        }
+        if (!active || user?.id !== record.id) return;
+        setReadingStats(current => {
+          const authoritative = { ...current, xp: record.xp, level: record.level, pagesRead: record.pagesRead,
+            booksFinished: record.booksFinished, streakDays: record.streakDays };
+          if (current.xp === authoritative.xp && current.level === authoritative.level
+            && current.pagesRead === authoritative.pagesRead && current.booksFinished === authoritative.booksFinished
+            && current.streakDays === authoritative.streakDays) return current;
+          return saveStoredReadingStats(authoritative);
+        });
       })
       .catch((error) => console.warn('Синхронизация рейтинга:', error));
-  }, [avatar, nickname, ownBooks.length, readingStats, user?.id]);
+    return () => { active = false; };
+  }, [avatar, nickname, ownBooks.length, readingListsHydrated, readingStats, sharedReadingLists, statsOwnerId, user?.id]);
 
   useEffect(() => {
     const refresh = () => fetchBookLikes(allBooks.map((book) => book.id), user?.id)
@@ -616,7 +849,8 @@ export function LibraryPage() {
   };
 
   useEffect(() => {
-    if (!leaderboardOpen || !user?.id) return;
+    if (!leaderboardOpen || !user?.id || statsOwnerId !== user.id) return;
+    let active = true;
     loadLeaderboard({
       userBooks,
       currentUserId: user.id,
@@ -624,25 +858,135 @@ export function LibraryPage() {
       currentAvatar: avatar,
       booksPublished: ownBooks.length,
       stats: readingStats,
-    }).then(setLeaderboard).catch(() => setLeaderboard([]));
-  }, [avatar, leaderboardOpen, nickname, ownBooks.length, readingStats, user?.id, userBooks]);
+    }).then((readers) => {
+      if (!active) return;
+      setLeaderboard(readers);
+      const cloudRecord = readers.find((reader) => reader.id === user.id);
+      if (cloudRecord && cloudRecord.xp > readingStats.xp) {
+        setReadingStats((current) => {
+          if (!active || current.xp >= cloudRecord.xp) return current;
+          const restored = saveStoredReadingStats({
+            ...current,
+            xp: cloudRecord.xp,
+            level: calculateLevel(cloudRecord.xp).level,
+            pagesRead: Math.max(current.pagesRead, cloudRecord.pagesRead),
+            booksFinished: Math.max(current.booksFinished, cloudRecord.booksFinished),
+            streakDays: Math.max(current.streakDays, cloudRecord.streakDays),
+          });
+          return restored;
+        });
+      }
+    }).catch(() => { if (active) setLeaderboard([]); });
+    return () => { active = false; };
+  }, [avatar, leaderboardOpen, nickname, ownBooks.length, readingStats, statsOwnerId, user?.id, userBooks]);
 
   // Форма добавления и редактирования книги
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Пользовательские книги');
   const [newCommunityCategory, setNewCommunityCategory] = useState('other');
-  const [newLanguage, setNewLanguage] = useState<'ru' | 'en' | 'kk' | 'zh'>(language === 'zh' ? 'zh' : language);
+  const [newLanguage, setNewLanguage] = useState<NonNullable<Book['language']>>(language === 'zh' ? 'zh' : language);
   const [newSummary, setNewSummary] = useState('');
   const [newPrice, setNewPrice] = useState('0');
   const [newSpine, setNewSpine] = useState('#8C704B');
   const [newCover, setNewCover] = useState('');
+  const [coverUploading, setCoverUploading] = useState(false);
+  const coverUploadGeneration = useRef(0);
   const [coverType, setCoverType] = useState<'ready' | 'custom'>('ready');
   const [selectedReadyCoverId, setSelectedReadyCoverId] = useState(READY_COVERS[0].id);
   const [newPages, setNewPages] = useState<BookPage[]>(() => [
-    { kicker: t('defaultPage1Kicker'), title: t('defaultPage1Title'), text: t('defaultPage1Text') },
-    { kicker: t('defaultPage2Kicker'), title: t('defaultPage2Title'), text: t('defaultPage2Text') },
+    { kicker: t('defaultPage1Kicker'), title: t('defaultPage1Title'), text: '' },
   ]);
+  const [previewPageIndex, setPreviewPageIndex] = useState<number | null>(null);
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const coverFileRef = useRef<HTMLInputElement | null>(null);
+  const pageTextareasRef = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const illustrationFileRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+  const bookDraftKey = user?.id ? `library-book-draft-${user.id}` : null;
+
+  useEffect(() => {
+    if (!uploadModalOpen || editingBookId || !bookDraftKey) return;
+    const timeout = window.setTimeout(() => {
+      try {
+        const draft = JSON.stringify({
+          title: newTitle,
+          communityCategory: newCommunityCategory,
+          language: newLanguage,
+          summary: newSummary,
+          price: newPrice,
+          spine: newSpine,
+          cover: newCover.length < 1_500_000 ? newCover : '',
+          coverType,
+          selectedReadyCoverId,
+          pages: newPages,
+          savedAt: Date.now(),
+        });
+        if (draft.length < 2_500_000) window.localStorage.setItem(bookDraftKey, draft);
+      } catch (error) {
+        console.warn('Unable to save the local book draft:', error);
+      }
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [bookDraftKey, coverType, editingBookId, newCommunityCategory, newCover, newLanguage, newPages, newPrice, newSpine, newSummary, newTitle, selectedReadyCoverId, uploadModalOpen]);
+
+  useEffect(() => {
+    if (!uploadModalOpen || !user?.id || !newCover.startsWith('data:image/')) return;
+    const generation = ++coverUploadGeneration.current;
+    setCoverUploading(true);
+    void migrateInlineBookCover(newCover, user.id).then((url) => {
+      if (coverUploadGeneration.current === generation) setNewCover(url);
+    }).catch((error) => {
+      console.warn('Could not migrate a saved cover yet:', error);
+      if (coverUploadGeneration.current === generation) setNotice(t('coverMigrationPending'));
+    }).finally(() => {
+      if (coverUploadGeneration.current === generation) setCoverUploading(false);
+    });
+    return () => {
+      if (coverUploadGeneration.current === generation) {
+        coverUploadGeneration.current++;
+        setCoverUploading(false);
+      }
+    };
+  }, [newCover, t, uploadModalOpen, user?.id]);
+
+  const openNewBookEditor = () => {
+    setEditingBookId(null);
+    setPreviewPageIndex(null);
+    setRightsConfirmed(false);
+    let draft: Record<string, unknown> | null = null;
+    try {
+      const stored = bookDraftKey ? window.localStorage.getItem(bookDraftKey) : null;
+      draft = stored ? JSON.parse(stored) as Record<string, unknown> : null;
+    } catch {
+      draft = null;
+    }
+    if (draft) {
+      if (typeof draft.title === 'string') setNewTitle(draft.title);
+      if (typeof draft.communityCategory === 'string') setNewCommunityCategory(draft.communityCategory);
+      if (draft.language === 'ru' || draft.language === 'en' || draft.language === 'kk' || draft.language === 'zh') setNewLanguage(draft.language);
+      if (typeof draft.summary === 'string') setNewSummary(draft.summary);
+      if (typeof draft.price === 'string') setNewPrice(draft.price);
+      if (typeof draft.spine === 'string') setNewSpine(draft.spine);
+      if (typeof draft.cover === 'string') setNewCover(draft.cover);
+      if (draft.coverType === 'ready' || draft.coverType === 'custom') setCoverType(draft.coverType);
+      if (typeof draft.selectedReadyCoverId === 'string') setSelectedReadyCoverId(draft.selectedReadyCoverId);
+      if (Array.isArray(draft.pages) && draft.pages.every((page) => page && typeof page === 'object' && typeof (page as BookPage).text === 'string')) {
+        setNewPages(draft.pages as BookPage[]);
+      }
+    } else {
+      setNewTitle('');
+      setNewCommunityCategory('other');
+      setNewLanguage(language);
+      setNewSummary('');
+      setNewPrice('0');
+      setNewSpine('#8C704B');
+      setNewCover('');
+      setCoverType('ready');
+      setSelectedReadyCoverId(READY_COVERS[0].id);
+      setNewPages([{ kicker: t('defaultPage1Kicker'), title: t('defaultPage1Title'), text: '' }]);
+    }
+    setUploadModalOpen(true);
+  };
 
   // Редактирование профиля в кабинете
   const [inputNickname, setInputNickname] = useState(nickname);
@@ -656,18 +1000,26 @@ export function LibraryPage() {
   const isCommunityCategory = (book: Book) => book.isUserBook || book.category === 'Пользовательские книги';
 
   const categories = useMemo(() => {
-    const fixed = [t('all'), t('myBooks'), t('topBooks'), t('userBooks'), t('fiction')];
+    const fixed = [t('all'), t('myBooks'), t('topBooks'), t('userBooks'), t('fiction'), t('readingLists')];
     const rest = [...new Set(allBooks.map((book) => categoryLabels[book.category] || book.category))].filter((label) => !fixed.includes(label));
     return [...fixed, ...rest];
   }, [allBooks, t]);
+  const categoryBookCount = (item: string) => {
+    if (item === t('all')) return allBooks.length;
+    if (item === t('myBooks')) return ownBooks.length;
+    if (item === t('topBooks')) return allBooks.length;
+    if (item === t('userBooks')) return allBooks.filter(isCommunityCategory).length;
+    if (item === t('readingLists')) return readingListCounts.all;
+    if (item === t('fiction')) return allBooks.filter((book) => categoryLabels[book.category] === t('categoryFiction')).length;
+    return allBooks.filter((book) => (categoryLabels[book.category] || book.category) === item).length;
+  };
 
   const filteredBooks = useMemo(() => {
-    const normalized = query.toLowerCase().trim();
-    const sortedBooks = category === t('topBooks')
-      ? [...allBooks].sort((a, b) => (bookLikes[b.id] || 0) - (bookLikes[a.id] || 0))
-      : allBooks;
-    const result = sortedBooks.filter((book) => {
-      const matchesQuery = !normalized || `${book.title} ${book.author}`.toLowerCase().includes(normalized);
+    const normalizeSearch = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase().trim();
+    const normalized = normalizeSearch(query);
+    const result = allBooks.filter((book) => {
+      const searchable = normalizeSearch(`${book.title} ${book.author} ${book.summary} ${categoryLabels[book.category] || book.category}`);
+      const matchesQuery = !normalized || searchable.includes(normalized);
       if (!matchesQuery) return false;
 
       // Фильтрация по основной категории
@@ -682,6 +1034,9 @@ export function LibraryPage() {
           if (!allBooks.some((item) => item.id === book.id)) return false;
         } else if (category === t('userBooks')) {
           if (!isCommunityCategory(book)) return false;
+        } else if (category === t('readingLists')) {
+          const status = readingStatuses[String(book.id)];
+          if (!status || (readingListFilter !== 'all' && status !== readingListFilter)) return false;
         } else if (category === t('fiction')) {
           if (book.category !== 'Художественная литература') return false;
         } else if ((categoryLabels[book.category] || book.category) !== category) {
@@ -703,16 +1058,64 @@ export function LibraryPage() {
       return true;
     });
 
+    const collator = new Intl.Collator(language, { sensitivity: 'base', numeric: true });
+    if (sortOrder === 'title') result.sort((a, b) => collator.compare(a.title, b.title));
+    else if (sortOrder === 'author') result.sort((a, b) => collator.compare(a.author, b.author) || collator.compare(a.title, b.title));
+    else if (sortOrder === 'year') result.sort((a, b) => (b.publicationYear || -Infinity) - (a.publicationYear || -Infinity) || collator.compare(a.title, b.title));
+    else if (sortOrder === 'popular' || (sortOrder === 'catalog' && category === t('topBooks'))) {
+      result.sort((a, b) => (bookLikes[b.id] || 0) - (bookLikes[a.id] || 0) || collator.compare(a.title, b.title));
+    }
     return result;
-  }, [allBooks, bookLikes, category, communitySubcategory, query, subLang, t, user?.id]);
+  }, [allBooks, bookLikes, category, categoryLabels, communitySubcategory, language, query, readingListFilter, readingStatuses, sortOrder, subLang, t, user?.id]);
 
   useEffect(() => {
-    window.localStorage.setItem('library-cart', JSON.stringify(cart));
-  }, [cart]);
+    setVisibleBookCount(24);
+  }, [category, communitySubcategory, query, readingListFilter, sortOrder, subLang]);
 
   useEffect(() => {
-    window.localStorage.setItem('library-bookmarks', JSON.stringify(bookmarks));
-  }, [bookmarks]);
+    setProfileReadingVisibleCount(12);
+  }, [profileReadingTab]);
+
+  useEffect(() => {
+    window.localStorage.setItem(accountStorageKey('library-cart', user?.id), JSON.stringify(cart));
+  }, [cart, user?.id]);
+
+
+  useEffect(() => {
+    window.localStorage.setItem(accountStorageKey('library-reading-statuses', user?.id), JSON.stringify(readingStatuses));
+  }, [readingStatuses, user?.id]);
+
+  useEffect(() => {
+    window.localStorage.setItem('library-sort-order', JSON.stringify(sortOrder));
+  }, [sortOrder]);
+
+
+  useEffect(() => {
+    window.localStorage.setItem('library-reader-font-size', JSON.stringify(readerFontSize));
+  }, [readerFontSize]);
+
+  useEffect(() => {
+    window.localStorage.setItem('library-reader-theme', JSON.stringify(readerTheme));
+  }, [readerTheme]);
+
+  useEffect(() => {
+    window.localStorage.setItem('library-reader-width', JSON.stringify(readerWidth));
+  }, [readerWidth]);
+
+  const lastReadingPage = useRef<{ book: number; page: number; offset: number } | null>(null);
+  useEffect(() => {
+    if (!selectedBook || readerTab !== 'full' || !selectedBook.pages.length) {
+      lastReadingPage.current = null;
+      return;
+    }
+    const page = Math.min(pageIndex + 1, selectedBook.pages.length);
+    const previous = lastReadingPage.current;
+    lastReadingPage.current = { book: selectedBook.id, page, offset: readerOffset };
+    // Opening a book must not overwrite a position still arriving from the cloud.
+    if (previous?.book === selectedBook.id && (previous.page !== page || previous.offset !== readerOffset)) {
+      readerSync.setEntry('progress', String(selectedBook.id), { title: selectedBook.title, page, offset: readerOffset });
+    }
+  }, [pageIndex, readerOffset, readerTab, selectedBook?.id, selectedBook?.pages.length, selectedBook?.title, readerSync.setEntry]);
 
   useEffect(() => {
     document.body.style.overflow = selectedBook || cartOpen || bookmarksOpen || accountOpen || photoPreview ? 'hidden' : '';
@@ -727,56 +1130,59 @@ export function LibraryPage() {
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (event.key === 'ArrowRight') turnPages('next');
       if (event.key === 'ArrowLeft') turnPages('previous');
-      if (event.key === 'Escape') setSelectedBook(null);
+      if (event.key === 'Escape') {
+        setSelectedBook(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [readerTab, selectedBook, isTurning, pageIndex]);
+  }, [readerTab, selectedBook, pageIndex]);
 
-  const turnPages = (direction: 'next' | 'previous') => {
-    if (!selectedBook || !selectedBook.pages.length || isTurning) return;
-    const lastStart = Math.max(0, Math.floor((selectedBook.pages.length - 1) / 2) * 2);
-    const nextIndex = direction === 'next'
-      ? Math.min(pageIndex + 2, lastStart)
-      : Math.max(pageIndex - 2, 0);
-    if (nextIndex === pageIndex) return;
-    setTurnDirection(direction);
-    setTurningTo(nextIndex);
-    setIsTurning(true);
+  const turnPages = (direction: 'next' | 'previous') => adaptiveReaderRef.current?.turn(direction);
 
-    // Начисление опыта за чтение (каждый переворот страниц = +15 XP)
-    const res = addReadingXp(15, true);
-    setReadingStats(res.stats);
-    if (res.leveledUp) {
-      setLevelUpBanner(`🎉 ${t('levelUpNotice')} ${t('levelShort')} ${res.stats.level}!`);
-      setTimeout(() => setLevelUpBanner(null), 3500);
-    }
-
-    if (turnTimer.current) window.clearTimeout(turnTimer.current);
-    turnTimer.current = window.setTimeout(() => {
-      setPageIndex(nextIndex);
-      setTurningTo(null);
-      setIsTurning(false);
-      turnTimer.current = null;
-    }, PAGE_TURN_MS);
-  };
-
-  const openReader = (book: Book, startPage = 0) => {
-    if (turnTimer.current) window.clearTimeout(turnTimer.current);
+  const openReader = (book: Book, startPage?: number, startOffset?: number) => {
+    explicitReaderStart.current = startPage !== undefined;
     setSelectedBook(book);
-    setPageIndex(Math.floor(Math.max(0, Math.min(startPage, (book.pageCount || book.pages.length) - 1)) / 2) * 2);
-    setJumpPage('');
+    const savedPage = readingProgress[String(book.id)]?.page;
+    const requestedPage = startPage ?? (savedPage ? savedPage - 1 : 0);
+    const safeStart = Math.max(0, Math.min(requestedPage, (book.pageCount || book.pages.length) - 1));
+    setReaderPage(safeStart);
+    setReaderOffset(startOffset ?? readingProgress[String(book.id)]?.offset ?? 0);
     setReaderTab('summary');
-    setIsTurning(false);
-    setTurningTo(null);
 
     // Вход в книгу также дает ежедневную активность и +10 XP
-    const res = addReadingXp(10, false);
-    setReadingStats(res.stats);
-    if (res.leveledUp) {
-      setLevelUpBanner(`🎉 ${t('levelUpNotice')} ${t('levelShort')} ${res.stats.level}!`);
-      setTimeout(() => setLevelUpBanner(null), 3500);
+
+  };
+
+  useEffect(() => {
+    if (!selectedBook || readerTab !== 'full' || !selectedBook.pages.length) return;
+    const visiblePages = (visibleReaderSources.length ? visibleReaderSources : [pageIndex]).filter((page) => page < selectedBook.pages.length);
+    if (user?.id) {
+      if (statsOwnerId !== user.id) return;
+      let active = true;
+      void awardRemoteReadingPages(selectedBook.id, visiblePages).then((result) => {
+        if (!active || !user?.id || statsOwnerId !== user.id) return;
+        setReadingStats(current => saveStoredReadingStats({ ...current, xp: result.xp, level: result.level,
+          streakDays: result.streakDays, pagesRead: result.pagesRead }));
+        if (result.gainedXp > 0 && result.level > readingStats.level) {
+          setLevelUpBanner(`🎉 ${t('levelUpNotice')} ${t('levelShort')} ${result.level}!`);
+          window.setTimeout(() => setLevelUpBanner(null), 3500);
+        }
+      }).catch((error) => console.warn('Не удалось начислить опыт за чтение:', error));
+      return () => { active = false; };
     }
+    const result = awardUniqueReadingPages(selectedBook.id, visiblePages);
+    if (!result.gainedXp) return;
+    setReadingStats(result.stats);
+    if (result.leveledUp) {
+      setLevelUpBanner(`?? ${t('levelUpNotice')} ${t('levelShort')} ${result.stats.level}!`);
+      window.setTimeout(() => setLevelUpBanner(null), 3500);
+    }
+    return undefined;
+  }, [pageIndex, readerTab, selectedBook?.id, selectedBook?.pages.length, t, user?.id, statsOwnerId, visibleReaderSources]);
+
+  const closeReader = () => {
+    setSelectedBook(null);
   };
 
   const addToCart = (book: Book, event?: React.MouseEvent<HTMLButtonElement>) => {
@@ -826,25 +1232,119 @@ export function LibraryPage() {
     }
   };
 
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setNewCover(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    if (!user?.id) {
+      setNotice(t('coverSignInRequired'));
+      window.setTimeout(() => setNotice(''), 3500);
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setNotice(t('illustrationWrongType'));
+      window.setTimeout(() => setNotice(''), 3500);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setNotice(t('illustrationTooLarge'));
+      window.setTimeout(() => setNotice(''), 3500);
+      return;
+    }
+    const generation = ++coverUploadGeneration.current;
+    setCoverUploading(true);
+    setNotice(t('uploading'));
+    try {
+      const url = await uploadBookIllustration(file, user.id);
+      if (coverUploadGeneration.current === generation) {
+        setNewCover(url);
+        setNotice('');
+      }
+    } catch (error) {
+      console.warn('Book cover upload failed:', error);
+      if (coverUploadGeneration.current === generation) setNotice(t('illustrationUploadError'));
+      window.setTimeout(() => setNotice(''), 4000);
+    } finally {
+      if (coverUploadGeneration.current === generation) setCoverUploading(false);
+    }
   };
 
   const handleAddPage = () => {
     setNewPages((prev) => [
       ...prev,
-      { kicker: `${t('pageKickerPrefix')} ${prev.length + 1}`, title: `${t('pageKickerPrefix')} ${prev.length + 1}`, text: t('pageTextPlaceholder') },
+      { kicker: `${t('pageKickerPrefix')} ${prev.length + 1}`, title: `${t('pageKickerPrefix')} ${prev.length + 1}`, text: '' },
     ]);
   };
 
   const handleUpdatePage = (index: number, field: keyof BookPage, value: string) => {
     setNewPages((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+  };
+
+  const insertPageMarkup = (index: number, before: string, after = '', placeholder = '') => {
+    const textarea = pageTextareasRef.current[index];
+    const page = newPages[index];
+    if (!page) return;
+    const value = page.text || '';
+    const start = textarea?.selectionStart ?? value.length;
+    const end = textarea?.selectionEnd ?? start;
+    const selected = value.slice(start, end) || placeholder;
+    const updatedText = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`;
+    handleUpdatePage(index, 'text', updatedText);
+    const selectionStart = start + before.length;
+    const selectionEnd = selectionStart + selected.length;
+    window.requestAnimationFrame(() => {
+      const activeTextarea = pageTextareasRef.current[index];
+      activeTextarea?.focus();
+      activeTextarea?.setSelectionRange(selectionStart, selectionEnd);
+    });
+  };
+
+  const handleIllustrationUpload = async (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      setNotice(t('illustrationWrongType'));
+      window.setTimeout(() => setNotice(''), 3500);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setNotice(t('illustrationTooLarge'));
+      window.setTimeout(() => setNotice(''), 3500);
+      return;
+    }
+    if (!user?.id) {
+      setNotice(t('illustrationUploadError'));
+      window.setTimeout(() => setNotice(''), 3500);
+      return;
+    }
+
+    const caret = pageTextareasRef.current[index]?.selectionStart ?? newPages[index]?.text.length ?? 0;
+    const description = window.prompt(t('illustrationAltPrompt'), file.name.replace(/\.[^.]+$/, ''));
+    if (description === null) return;
+    const caption = window.prompt(t('illustrationCaptionPrompt'), '') ?? '';
+    setNotice(t('uploading'));
+    try {
+      const url = await uploadBookIllustration(file, user.id);
+      const safeAlt = description.replace(/[\]\\]/g, ' ').trim() || file.name;
+      const safeCaption = caption.replace(/["\\\n\r]/g, ' ').trim();
+      const markdown = `![${safeAlt}](${url}${safeCaption ? ` "${safeCaption}"` : ''})`;
+      const value = newPages[index]?.text || '';
+      const insertion = `${value && caret > 0 && value[caret - 1] !== '\n' ? '\n\n' : ''}${markdown}\n\n`;
+      const updatedText = `${value.slice(0, caret)}${insertion}${value.slice(caret)}`;
+      handleUpdatePage(index, 'text', updatedText);
+      window.setTimeout(() => {
+        const textarea = pageTextareasRef.current[index];
+        textarea?.focus();
+        textarea?.setSelectionRange(caret + insertion.length, caret + insertion.length);
+      }, 0);
+      setNotice('');
+    } catch (error) {
+      console.warn('Book illustration upload failed:', error);
+      setNotice(t('illustrationUploadError'));
+      window.setTimeout(() => setNotice(''), 4000);
+    }
   };
 
   const detectBookLanguage = (title: string, summary: string, pages: BookPage[]) => {
@@ -875,11 +1375,44 @@ export function LibraryPage() {
     setNewPages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const retryBookPublication = (book: Book) => {
+    setPendingCloudBooks(current => current.map(item => item.id === book.id ? { ...item, publicationStatus: 'queued' } : item));
+    setUserBooks(current => current.map(item => item.id === book.id && item.ownerId === user?.id ? { ...item, publicationStatus: 'queued' } : item));
+    setBookSyncRevision(current => current + 1);
+    setNotice(t('bookSyncPending'));
+  };
+
+  const saveBookDraft = () => {
+    if (!bookDraftKey) { setNotice(t('draftSignInRequired')); return; }
+    try {
+      const draft = JSON.stringify({ title: newTitle, communityCategory: newCommunityCategory, language: newLanguage,
+        summary: newSummary, price: newPrice, spine: newSpine, cover: newCover.length < 1_500_000 ? newCover : '',
+        coverType, selectedReadyCoverId, pages: newPages, savedAt: Date.now() });
+      if (draft.length < 2_500_000) { window.localStorage.setItem(bookDraftKey, draft); setNotice(t('draftSavedNotice')); }
+      else setNotice(t('storageSaveError'));
+    } catch { setNotice(t('storageSaveError')); }
+  };
+
   const handleCreateBook = (e: React.FormEvent) => {
     e.preventDefault();
+    if (coverUploading || newCover.startsWith('data:image/')) {
+      setNotice(user?.id ? t('coverMigrationPending') : t('coverSignInRequired'));
+      window.setTimeout(() => setNotice(''), 3500);
+      return;
+    }
     if (!newTitle.trim() || !newSummary.trim()) {
       setNotice(t('needTitleSummary'));
       setTimeout(() => setNotice(''), 2500);
+      return;
+    }
+    if (!newPages.some((page) => page.text.trim() || page.pageImage)) {
+      setNotice(t('bookContentRequired'));
+      window.setTimeout(() => setNotice(''), 3000);
+      return;
+    }
+    if (!rightsConfirmed) {
+      setNotice(t('rightsConfirmation'));
+      window.setTimeout(() => setNotice(''), 3500);
       return;
     }
 
@@ -899,10 +1432,11 @@ export function LibraryPage() {
       spine: selectedTemplate ? selectedTemplate.spine : (coverType === 'custom' ? 'transparent' : (newSpine || '#8C704B')),
       summary: newSummary.trim(),
       coverImage: finalCover,
-      pages: newPages.length > 0 ? newPages : [
+      pages: newPages.filter((page) => page.text.trim() || page.pageImage).length > 0 ? newPages.filter((page) => page.text.trim() || page.pageImage) : [
         { kicker: `${t('pageKickerPrefix')} 1`, title: newTitle.trim(), text: newSummary.trim() }
       ],
       isUserBook: true,
+      publicationStatus: user?.id ? 'queued' : 'draft',
     };
 
     const updatedBooks = editingBookId
@@ -911,10 +1445,12 @@ export function LibraryPage() {
     persistUserBooks(updatedBooks);
 
     // Сохранение в облачную базу Supabase для всех пользователей мира
-    (editingBookId ? updateRemoteBook(created) : saveRemoteBook(created)).catch((err) => console.warn('Supabase cloud sync:', err));
+    // Keep the local copy and retry cloud publication while offline or after a transient failure.
+    setPendingCloudBooks((current) => [...current.filter((book) => book.id !== created.id), created]);
+    setBookSyncRevision(current => current + 1);
 
     // Опыт начисляется только за новую публикацию и зависит от числа страниц.
-    if (!editingBookId) {
+    if (!editingBookId && !user?.id) {
       const xpRes = addReadingXp(xpForBookPages(created.pages.length), false);
       setReadingStats(xpRes.stats);
       if (xpRes.leveledUp) {
@@ -925,10 +1461,12 @@ export function LibraryPage() {
 
     setUploadModalOpen(false);
     setEditingBookId(null);
+    setRightsConfirmed(false);
+    if (bookDraftKey) window.localStorage.removeItem(bookDraftKey);
     setCommunitySubcategory('all');
     setSubLang('all');
     setCategory(t('userBooks'));
-    setNotice(t('bookPublished'));
+    setNotice(t('bookSyncPending'));
     setTimeout(() => setNotice(''), 2500);
 
     setNewTitle('');
@@ -936,10 +1474,7 @@ export function LibraryPage() {
     setNewCommunityCategory('other');
     setNewSummary('');
     setNewCover('');
-    setNewPages([
-      { kicker: t('defaultPage1Kicker'), title: t('defaultPage1Title'), text: t('defaultPage1Text') },
-      { kicker: t('defaultPage2Kicker'), title: t('defaultPage2Title'), text: t('defaultPage2Text') },
-    ]);
+    setNewPages([{ kicker: t('defaultPage1Kicker'), title: t('defaultPage1Title'), text: '' }]);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -980,26 +1515,46 @@ export function LibraryPage() {
   const handleDeleteAccount = async () => {
     if (!window.confirm(t('deleteAccountConfirm'))) return;
     try {
-      if (user) {
-        await user.delete();
-      }
-      window.localStorage.clear();
+      if (!user) throw new Error('No active account');
+      await deleteMyLibraryData();
+      await user.delete();
+      clearAccountLocalData(user.id);
       window.location.href = `${window.location.origin}${basePath}/sign-up`;
     } catch (err) {
-      console.error(err);
-      window.localStorage.clear();
-      await signOut({ redirectUrl: `${window.location.origin}${basePath}/sign-up` });
+      console.error('Account deletion failed:', err);
+      setNotice(t('deleteAccountError'));
+      window.setTimeout(() => setNotice(''), 4000);
     }
   };
 
   const saveBookmark = () => {
     if (!selectedBook) return;
-    setBookmarks((current) => ({
-      ...current,
-      [selectedBook.id]: { title: selectedBook.title, page: pageIndex + 1 },
-    }));
+    readerSync.setEntry('bookmark', String(selectedBook.id), { title: selectedBook.title, page: pageIndex + 1, offset: readerOffset });
     setNotice(t('placeSavedNotice'));
     window.setTimeout(() => setNotice(''), 2200);
+  };
+
+  const updateReaderNote = (page: number, value: string) => {
+    if (selectedBook) readerSync.setEntry('note', selectedBook.id + ':' + page, value);
+  };
+
+  const downloadReaderText = async (book: Book) => {
+    try {
+      const pages = await loadBookPages(book);
+      if (!pages.length) throw new Error('The book has no text pages.');
+      const content = pages.map((page) => [page.title, page.text].filter(Boolean).join('\n\n')).join('\n\n');
+      const blobUrl = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${book.title.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'book'}.txt`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch {
+      setNotice(catalogText.error);
+      window.setTimeout(() => setNotice(''), 3000);
+    }
   };
 
   const cartBooks = allBooks.filter((book) => cart.includes(book.id));
@@ -1016,13 +1571,19 @@ export function LibraryPage() {
     setCheckoutOpen(false);
     setOrderSubmitted(true);
   };
-  const currentPages = selectedBook?.pages.slice(pageIndex, pageIndex + 2) ?? [];
-  const incomingPages = selectedBook && turningTo !== null ? selectedBook.pages.slice(turningTo, turningTo + 2) : [];
-  const leftPage = isTurning && turnDirection === 'previous' ? incomingPages[0] : currentPages[0];
-  const rightPage = isTurning && turnDirection === 'next' ? incomingPages[1] : currentPages[1];
-  const leftNumber = (isTurning && turnDirection === 'previous' && turningTo !== null ? turningTo : pageIndex) + 1;
-  const rightNumber = (isTurning && turnDirection === 'next' && turningTo !== null ? turningTo : pageIndex) + 2;
+  const readerSearchHits = useMemo(() => {
+    const needle = readerSearchQuery.toLocaleLowerCase().trim();
+    if (!selectedBook || !needle) return [];
+    return selectedBook.pages.flatMap((page, index) => {
+      const match = page.text.toLocaleLowerCase().indexOf(needle);
+      if (match < 0) return [];
+      const start = Math.max(0, match - 70);
+      const end = Math.min(page.text.length, match + needle.length + 110);
+      return [{ page: index, offset: match, title: page.title || page.kicker, excerpt: page.text.slice(start, end).replace(/\s+/g, ' ').trim() }];
+    }).slice(0, 50);
+  }, [readerSearchQuery, selectedBook?.id, selectedBook?.pages]);
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.username ?? t('reader');
+  const profileReadingBooks = allBooks.filter((book) => readingStatuses[String(book.id)] === profileReadingTab);
 
   return (
     <div className="library-app">
@@ -1057,7 +1618,7 @@ export function LibraryPage() {
           <button type="button" onClick={() => setAccountOpen(true)} className="library-nav-account-btn">
             <img src={avatar || DEFAULT_AVATAR} alt="" className="library-header-avatar" />
             <span>{nickname}</span>
-            <span className="library-header-level-badge">{t('levelShort')} {readingStats.level}</span>
+            <span className="library-header-level-badge">{t('levelShort')} {calculateLevel(readingStats.xp).level}</span>
           </button>
         </nav>
         <div className="library-header-actions">
@@ -1132,11 +1693,13 @@ export function LibraryPage() {
             </div>
             <span className="library-count">{filteredBooks.length} {t('foundOf')} {allBooks.length}</span>
           </div>
-          <div className="library-filters" role="tablist" aria-label={t('bookCategories')}>
+          <div className="library-filters" role="group" aria-label={t('bookCategories')}>
             {categories.map((item) => {
               const isActive = category === item || (category === 'all' && item === t('all'));
               return (
-                <button key={item} type="button" role="tab" aria-selected={isActive} className={isActive ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>
+                <button key={item} type="button" aria-pressed={isActive} className={isActive ? 'active' : ''} onClick={() => setCategory(item)}>
+                  <span>{item}</span><span className="library-filter-count">{categoryBookCount(item)}</span>
+                </button>
               );
             })}
           </div>
@@ -1157,6 +1720,18 @@ export function LibraryPage() {
             </div>
           )}
 
+          {category === t('readingLists') && (
+            <div className="library-subcategories" aria-label={t('readingLists')}>
+              <span className="library-subcategory-label">{t('readingListStatus')}:</span>
+              <div className="library-subcategory-pills">
+                {(['all', 'want', 'reading', 'done'] as const).map((status) => {
+                  const label = status === 'all' ? t('statusAll') : t(`status${status[0].toUpperCase()}${status.slice(1)}` as 'statusWant' | 'statusReading' | 'statusDone');
+                  return <button key={status} type="button" className={`library-subpill ${readingListFilter === status ? 'is-active' : ''}`} onClick={() => setReadingListFilter(status)}>{label} <span>({readingListCounts[status]})</span></button>;
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Filter by the language a book is written in. */}
           <div className="library-subcategories" aria-label={t('bookLanguage')}>
             <span className="library-subcategory-label">{t('bookLanguage')}:</span>
@@ -1166,42 +1741,36 @@ export function LibraryPage() {
                 className={`library-subpill ${subLang === 'all' ? 'is-active' : ''}`}
                 onClick={() => setSubLang('all')}
               >
-                {t('allLanguages')}
+                {t('allLanguages')} <span>{allBooks.length}</span>
               </button>
-              <button
-                type="button"
-                className={`library-subpill ${subLang === 'ru' ? 'is-active' : ''}`}
-                onClick={() => setSubLang('ru')}
-              >
-                🇷🇺 {t('langRu')}
-              </button>
-              <button
-                type="button"
-                className={`library-subpill ${subLang === 'en' ? 'is-active' : ''}`}
-                onClick={() => setSubLang('en')}
-              >
-                🇬🇧 {t('langEn')}
-              </button>
-              <button
-                type="button"
-                className={`library-subpill ${subLang === 'kk' ? 'is-active' : ''}`}
-                onClick={() => setSubLang('kk')}
-              >
-                🇰🇿 {t('langKk')}
-              </button>
-              <button
-                type="button"
-                className={`library-subpill ${subLang === 'zh' ? 'is-active' : ''}`}
-                onClick={() => setSubLang('zh')}
-              >
-                🇨🇳 {t('langZh')}
-              </button>
+              {(['ru', 'en', 'kk', 'zh'] as const).filter((code) => allBooks.some((book) => (book.language || 'ru') === code)).map((code) => {
+                const names: Record<string, string> = {
+                  ru: t('langRu'), en: t('langEn'), kk: t('langKk'), zh: t('langZh'),
+                };
+                const count = allBooks.filter((book) => (book.language || 'ru') === code).length;
+                return (
+                  <button key={code} type="button" className={`library-subpill ${subLang === code ? 'is-active' : ''}`} onClick={() => setSubLang(code)}>
+                    {names[code] || code.toUpperCase()} <span>{count}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
+          <label className="library-sort-control">
+            <span>{readerControls.label}</span>
+            <select aria-label={readerControls.label} value={sortOrder} onChange={(event) => setSortOrder(event.target.value as BookSort)}>
+              <option value="catalog">{readerControls.catalog}</option>
+              <option value="title">{readerControls.title}</option>
+              <option value="author">{readerControls.author}</option>
+              <option value="year">{readerControls.year}</option>
+              <option value="popular">{readerControls.popular}</option>
+            </select>
+          </label>
+
           {filteredBooks.length ? (
             <div className="library-book-grid">
-              {filteredBooks.map((book) => (
+              {filteredBooks.slice(0, visibleBookCount).map((book) => (
                 <article className={`library-book-card ${book.id === books[0].id || book.id === books[1].id ? 'library-book-card-special' : ''}`} key={book.id}>
                   {book.id === books[0].id || book.id === books[1].id ? (
                     <div className="library-card-3d-stage flex flex-col items-center justify-center relative min-h-[290px] pt-1">
@@ -1237,9 +1806,29 @@ export function LibraryPage() {
                     />
                     <p>{book.author}</p>
                   </div>
+                  <div className="library-card-meta">
+                    <span>{categoryLabels[book.category] || book.category}</span>
+                    {book.publicationYear ? <span>{book.publicationYear}</span> : null}
+                  </div>
+                  <p className="library-book-card-summary">{book.summary}</p>
                   <div className="flex items-center justify-between">
                     <strong>{book.price === 0 ? t('free') : `${book.price} ₸`}</strong>
                   </div>
+                  {book.ownerId && book.ownerId === user?.id && book.publicationStatus ? (
+                    <div className={`library-publication-status is-${book.publicationStatus}`}>
+                      <span>{t(book.publicationStatus === 'draft' ? 'publicationDraft' : book.publicationStatus === 'queued' ? 'publicationQueued' : book.publicationStatus === 'publishing' ? 'publicationPublishing' : book.publicationStatus === 'published' ? 'publicationPublished' : 'publicationFailed')}</span>
+                      {book.publicationStatus === 'failed' ? <button type="button" onClick={() => retryBookPublication(book)}>{t('retryPublication')}</button> : null}
+                    </div>
+                  ) : null}
+                  <label className="library-reading-status-row">
+                    <span>{t('readingListStatus')}</span>
+                    <select aria-label={`${t('readingListStatus')}: ${book.title}`} value={readingStatuses[String(book.id)] || ''} onChange={(event) => updateReadingStatus(book.id, event.target.value)}>
+                      <option value="">{t('statusNone')}</option>
+                      <option value="want">{t('statusWant')}</option>
+                      <option value="reading">{t('statusReading')}</option>
+                      <option value="done">{t('statusDone')}</option>
+                    </select>
+                  </label>
                   <div className="library-card-actions">
                     <button type="button" className="library-primary-button" onClick={() => openReader(book)}>
                       {book.price === 0 ? t('readFree') : t('openBook')}
@@ -1271,6 +1860,15 @@ export function LibraryPage() {
             </div>
           ) : <p className="library-empty">{t('noBooks')}</p>}
 
+          {visibleBookCount < filteredBooks.length && (
+            <div className="flex justify-center py-8">
+              <button type="button" className="library-outline-button" onClick={() => setVisibleBookCount(count => count + 24)}>
+                {({ ru: 'Показать ещё', en: 'Show more', kk: 'Тағы көрсету', zh: '显示更多' })[language]}
+                {' '}({Math.min(24, filteredBooks.length - visibleBookCount)})
+              </button>
+            </div>
+          )}
+
           {/* Секция загрузки книг от пользователей внизу каталога */}
           <div className="library-upload-section">
             <div className="library-upload-card">
@@ -1285,7 +1883,7 @@ export function LibraryPage() {
               <button
                 type="button"
                 className="library-primary-button library-upload-cta-btn"
-                onClick={() => { setEditingBookId(null); setUploadModalOpen(true); }}
+                onClick={openNewBookEditor}
               >
                 <PlusCircle size={18} /> {t('uploadBook')}
               </button>
@@ -1301,8 +1899,8 @@ export function LibraryPage() {
           <section className="library-reader" role="dialog" aria-modal="true" aria-labelledby="reader-title">
             <div className="library-reader-toolbar">
               <span id="reader-title"><span className="library-reader-dot" /> {selectedBook.title}</span>
-              <span className="library-reader-progress">{readerTab === 'summary' ? t('summary') : `${Math.min(pageIndex + 2, selectedBook.pageCount || selectedBook.pages.length)} / ${selectedBook.pageCount || selectedBook.pages.length} ${t('pages')}`}</span>
-              <button type="button" onClick={() => setSelectedBook(null)} aria-label={t('close')}>{t('close')} <X size={18} /></button>
+              {readerTab === 'summary' && <span className="library-reader-progress">{t('summary')}</span>}
+              <button type="button" onClick={closeReader} aria-label={t('close')}>{t('close')} <X size={18} /></button>
             </div>
             <div className="library-reader-tabs">
               <button type="button" className={readerTab === 'summary' ? 'active' : ''} onClick={() => setReaderTab('summary')}>{t('aboutBook')}</button>
@@ -1316,13 +1914,28 @@ export function LibraryPage() {
                   <p className="library-reader-author">{selectedBook.author} · {selectedBook.category}</p>
                   <span className="library-summary-label">{t('aboutBook')}</span>
                   <p className="library-summary-copy">{selectedBook.summary}</p>
+                  {readingProgress[String(selectedBook.id)]?.page > 1 && (
+                    <p className="library-reading-resume">{readerControls.resume} {readerControls.page} {readingProgress[String(selectedBook.id)].page}</p>
+                  )}
                   {selectedBook.sourceUrl && <div className="library-source-details">
                     <span>{catalogText.complete} · {selectedBook.language?.toUpperCase()} · {selectedBook.pageCount} {t('pages')}{selectedBook.publicationYear ? ` · ${selectedBook.publicationYear}` : ''}</span>
                     <a href={selectedBook.sourceUrl} target="_blank" rel="noopener noreferrer">{catalogText.source}: {selectedBook.sourceName} ↗</a>
+                    {selectedBook.coverSourceUrl && <a href={selectedBook.coverSourceUrl} target="_blank" rel="noopener noreferrer">{catalogText.coverSource} ↗</a>}
+                    {selectedBook.coverLicense && <small>{t('coverLicense')}: {selectedBook.coverLicense}</small>}
                     <small>{selectedBook.sourceLicense}</small>
-                    <a href={`${import.meta.env.BASE_URL}books/SOURCES.md`} target="_blank" rel="noopener noreferrer">{catalogText.rights} ↗</a>
+                    <a href={`${import.meta.env.BASE_URL}${selectedBook.rightsPath || 'books/SOURCES.md'}`} target="_blank" rel="noopener noreferrer">{catalogText.rights} ↗</a>
                     {selectedBook.downloadPath && <a href={`${import.meta.env.BASE_URL}${selectedBook.downloadPath}`} download>{catalogText.download} ↓</a>}
+                    {(selectedBook.textPath || selectedBook.pages.length > 0) && !selectedBook.downloadPath && <button type="button" className="library-inline-download" onClick={() => void downloadReaderText(selectedBook)}>{catalogText.download} ↓</button>}
                   </div>}
+                  <label className="library-reading-status-row library-summary-status-row">
+                    <span>{t('readingListStatus')}</span>
+                    <select aria-label={`${t('readingListStatus')}: ${selectedBook.title}`} value={readingStatuses[String(selectedBook.id)] || ''} onChange={(event) => updateReadingStatus(selectedBook.id, event.target.value)}>
+                      <option value="">{t('statusNone')}</option>
+                      <option value="want">{t('statusWant')}</option>
+                      <option value="reading">{t('statusReading')}</option>
+                      <option value="done">{t('statusDone')}</option>
+                    </select>
+                  </label>
                   <div className="library-book-owner-actions">
                     {selectedBook.ownerId === user?.id ? (
                       <>
@@ -1330,9 +1943,25 @@ export function LibraryPage() {
                         <button type="button" className="library-outline-button" onClick={() => { setSelectedBook(null); deleteOwnBook(selectedBook); }}><Trash2 size={14} /> {t('deleteBook')}</button>
                       </>
                     ) : null}
+                    {selectedBook.isUserBook && selectedBook.ownerId !== user?.id && user?.id ? (
+                      <button type="button" className="library-outline-button" onClick={async () => {
+                        const reason = window.prompt(t('reportBookPrompt'));
+                        if (!reason?.trim()) return;
+                        const sent = await reportCommunityBook(selectedBook, user.id, reason);
+                        setNotice(t(sent ? 'reportSent' : 'reportFailed'));
+                        window.setTimeout(() => setNotice(''), 3500);
+                      }}><Flag size={14} /> {t('reportBook')}</button>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" className="library-primary-button" onClick={() => setReaderTab('full')}>{t('startReading')} <ChevronRight size={16} /></button>
+                    <button type="button" className="library-primary-button" onClick={() => {
+                      const saved = readingProgress[String(selectedBook.id)]?.page;
+                      if (!explicitReaderStart.current && saved) {
+                        const last = Math.max(0, (selectedBook.pageCount || selectedBook.pages.length) - 1);
+                        setReaderPage(Math.floor(Math.min(saved - 1, last) / 2) * 2);
+                      }
+                      setReaderTab('full');
+                    }}>{readingProgress[String(selectedBook.id)]?.page > 1 ? readerControls.continue : t('startReading')} <ChevronRight size={16} /></button>
                   </div>
                 </div>
               </div>
@@ -1342,42 +1971,49 @@ export function LibraryPage() {
                 {readerError && <button type="button" className="library-primary-button" onClick={() => setReaderRetry((value) => value + 1)}>{catalogText.retry}</button>}
               </div>
             ) : (
-              <div className="library-full-reader" lang={selectedBook.language}>
-                <div className={`library-book-spread ${isTurning ? `is-turning turn-${turnDirection}` : ''}`}>
-                  <div className="library-spread-static">
-                    <PageSheet page={leftPage} number={leftNumber} side="left" disabled={isTurning} onTurn={pageIndex === 0 ? undefined : () => turnPages('previous')} />
-                    <PageSheet page={rightPage} number={rightNumber} side="right" disabled={isTurning} onTurn={pageIndex + 2 >= selectedBook.pages.length ? undefined : () => turnPages('next')} />
-                  </div>
-                  {isTurning ? (
-                    <div className="library-flip-leaf" aria-hidden="true">
-                      <div className="library-flip-face library-flip-front">
-                        {turnDirection === 'next'
-                          ? <PageSheet page={currentPages[1]} number={pageIndex + 2} side="right" />
-                          : <PageSheet page={currentPages[0]} number={pageIndex + 1} side="left" />}
-                      </div>
-                      <div className="library-flip-face library-flip-back">
-                        {turnDirection === 'next'
-                          ? <PageSheet page={incomingPages[0]} number={(turningTo ?? 0) + 1} side="left" />
-                          : <PageSheet page={incomingPages[1]} number={(turningTo ?? 0) + 2} side="right" />}
-                      </div>
-                    </div>
-                  ) : null}
+              <div className={`library-full-reader${selectedBook.id === 1000 ? ' library-compact-book' : ''}`} lang={selectedBook.language}>
+                <div className="library-reader-sync" role="status" aria-live="polite">
+                  {t(({ syncing: 'readerSyncing', saved: 'readerSynced', pending: 'readerSyncPending', offline: 'readerSyncOffline', error: 'readerSyncError', setupRequired: 'readerSyncSetupRequired', storageError: 'readerSyncStorageError' } as const)[readerSync.status])}
+                  {['error', 'offline', 'setupRequired', 'storageError'].includes(readerSync.status) && <button type="button" onClick={readerSync.retry}>{t('readerSyncRetry')}</button>}
                 </div>
-                <form className="library-page-jump" onSubmit={(event) => {
-                  event.preventDefault();
-                  const page = Number(jumpPage);
-                  if (!Number.isInteger(page) || page < 1 || page > selectedBook.pages.length || isTurning) return;
-                  setPageIndex(Math.floor((page - 1) / 2) * 2);
-                }}>
-                  <label htmlFor="reader-jump">{catalogText.page}</label>
-                  <input id="reader-jump" type="number" min="1" max={selectedBook.pages.length} value={jumpPage} placeholder={String(pageIndex + 1)} onChange={(event) => setJumpPage(event.target.value)} required />
-                  <button className="library-outline-button" type="submit" disabled={isTurning}>{catalogText.go}</button>
-                </form>
-                <div className="library-page-controls">
-                  <button type="button" disabled={pageIndex === 0 || isTurning} onClick={() => turnPages('previous')}><ChevronLeft size={16} /> {t('previous')}</button>
-                  <span>{pageIndex + 1}—{Math.min(pageIndex + 2, selectedBook.pages.length)} / {selectedBook.pages.length} {t('pages')}</span>
-                  <button type="button" disabled={pageIndex + 2 >= selectedBook.pages.length || isTurning} onClick={() => turnPages('next')}>{t('next')} <ChevronRight size={16} /></button>
-                </div>
+                {selectedBook.id !== 100 && <div className="library-reading-tools" aria-label={readerControls.label}>
+                  <button type="button" aria-label={t('readerSearch')} title={t('readerSearch')} aria-expanded={readerSearchOpen} onClick={() => setReaderSearchOpen((open) => !open)}><Search size={16} /><span>{t('readerSearch')}</span></button>
+                  <button type="button" aria-label={readerControls.smaller} title={readerControls.smaller} disabled={readerFontSize <= 15} onClick={() => setReaderFontSize(size => Math.max(15, size - 1))}><Minus size={16} /></button>
+                  <span aria-live="polite">{readerFontSize}px</span>
+                  <button type="button" aria-label={readerControls.larger} title={readerControls.larger} disabled={readerFontSize >= 23} onClick={() => setReaderFontSize(size => Math.min(23, size + 1))}><Plus size={16} /></button>
+                  <button type="button" aria-label={readerTheme === 'paper' ? readerControls.night : readerControls.paper} title={readerTheme === 'paper' ? readerControls.night : readerControls.paper} aria-pressed={readerTheme === 'night'} onClick={() => setReaderTheme(theme => theme === 'paper' ? 'night' : 'paper')}><Moon size={16} /><span>{readerTheme === 'paper' ? readerControls.night : readerControls.paper}</span></button>
+                  <label className="library-reader-width-control"><span>{t('lineWidth')}</span><select aria-label={t('lineWidth')} value={readerWidth} onChange={(event) => setReaderWidth(event.target.value as ReaderWidth)}><option value="narrow">{t('widthNarrow')}</option><option value="medium">{t('widthMedium')}</option><option value="wide">{t('widthWide')}</option></select></label>
+                </div>}
+                {readerSearchOpen && selectedBook.id !== 100 && <section className="library-reader-search-panel" aria-label={t('readerSearch')}>
+                  <label htmlFor="reader-search">{t('searchText')}</label>
+                  <input id="reader-search" value={readerSearchQuery} onChange={(event) => setReaderSearchQuery(event.target.value)} placeholder={t('searchText')} autoFocus />
+                  {readerSearchQuery.trim() && <span className="library-muted">{t('searchResults')}: {readerSearchHits.length}</span>}
+                  {readerSearchHits.length > 0 && <div className="library-reader-search-results">{readerSearchHits.map((hit) => <button type="button" key={hit.page} onClick={() => { setReaderPage(hit.page); setReaderOffset(hit.offset); setReaderSearchOpen(false); }}><strong>{hit.title} · {hit.page + 1}</strong><span>{hit.excerpt}</span></button>)}</div>}
+                </section>}
+                <AdaptiveReader
+                  ref={adaptiveReaderRef}
+                  pages={selectedBook.pages}
+                  location={{ source: pageIndex, offset: readerOffset }}
+                  fontSize={readerFontSize}
+                  width={readerWidth}
+                  theme={readerTheme}
+                  onVisibleSources={syncVisibleReaderSources}
+                  onNavigate={({ source, offset }) => { setReaderPage(source); setReaderOffset(offset); }}
+                />
+                {selectedBook.id !== 100 && <section className="library-reader-note">
+                  <label htmlFor="reader-page-note">{t('readerNote')} · {pageIndex + 1}</label>
+                  <textarea id="reader-page-note" value={readerNotes[`${selectedBook.id}:${pageIndex}`] || ''} onChange={(event) => updateReaderNote(pageIndex, event.target.value)} placeholder={t('notePlaceholder')} rows={3} maxLength={4000} />
+                  <small>{t('readerNotePrivacy')}</small>
+                  <ReaderNoteHistory key={selectedBook.id + ':' + pageIndex} owner={user?.id || ''} noteKey={selectedBook.id + ':' + pageIndex} onRestore={value => updateReaderNote(pageIndex, value)} />
+                </section>}
+                {selectedBook.id !== 100 && pageIndex + 2 >= selectedBook.pages.length && (
+                  <section className="library-reader-book-about" aria-labelledby="reader-book-about-title">
+                    <span>{t('aboutBook')}</span>
+                    <h3 id="reader-book-about-title">{selectedBook.title}</h3>
+                    <p>{selectedBook.summary}</p>
+                    <small>{selectedBook.author}{selectedBook.publicationYear ? ` · ${selectedBook.publicationYear}` : ''}</small>
+                  </section>
+                )}
               </div>
             )}
             <div className="library-reader-bottom">
@@ -1446,7 +2082,7 @@ export function LibraryPage() {
             <button type="button" className="library-close-button" onClick={() => setBookmarksOpen(false)}>{t('close')} <X size={18} /></button>
             <h2 id="bookmarks-title">{t('myBookmarks')}</h2>
             {Object.entries(bookmarks).length ? Object.entries(bookmarks).map(([id, bookmark]) => (
-              <button type="button" className="library-bookmark-item" key={id} onClick={() => { setBookmarksOpen(false); const book = allBooks.find((item) => item.id === Number(id)); if (book) openReader(book, Math.max(0, bookmark.page - 1)); }}>
+              <button type="button" className="library-bookmark-item" key={id} onClick={() => { setBookmarksOpen(false); const book = allBooks.find((item) => item.id === Number(id)); if (book) openReader(book, Math.max(0, bookmark.page - 1), bookmark.offset || 0); }}>
                 <span>{bookmark.title}</span><span>{t('page')} {bookmark.page}</span>
               </button>
             )) : <p className="library-muted">{t('noBookmarks')}</p>}
@@ -1467,6 +2103,7 @@ export function LibraryPage() {
             <span className="library-kicker">{t('userBooks')}</span>
             <h2 id="upload-modal-title">{editingBookId ? t('editBookTitle') : t('uploadBookTitle')}</h2>
             <p className="library-muted">{t('uploadBookDesc')}</p>
+            {!editingBookId ? <p className="library-draft-note">{t('draftAutoSaved')}</p> : null}
 
             <form onSubmit={handleCreateBook} className="library-upload-form">
               <div className="library-upload-grid">
@@ -1567,7 +2204,7 @@ export function LibraryPage() {
                         <input
                           ref={coverFileRef}
                           type="file"
-                          accept="image/*"
+                          accept="image/jpeg,image/png,image/webp"
                           onChange={handleCoverUpload}
                           className="hidden"
                         />
@@ -1576,7 +2213,7 @@ export function LibraryPage() {
                             <span className="library-cover-loaded-badge">✓ {t('coverUploaded')}</span>
                             <button
                               type="button"
-                              onClick={() => setNewCover('')}
+                              onClick={() => { coverUploadGeneration.current++; setCoverUploading(false); setNewCover(''); }}
                               className="library-text-btn"
                             >
                               {t('cancel')}
@@ -1712,6 +2349,14 @@ export function LibraryPage() {
                               placeholder={t('pageTitle')}
                               className="library-page-input-title"
                             />
+                            <button
+                              type="button"
+                              className="library-page-preview-btn"
+                              onClick={() => setPreviewPageIndex(previewPageIndex === idx ? null : idx)}
+                              aria-expanded={previewPageIndex === idx}
+                            >
+                              {previewPageIndex === idx ? t('close') : t('previewPage')}
+                            </button>
                             {newPages.length > 1 ? (
                               <button
                                 type="button"
@@ -1723,19 +2368,46 @@ export function LibraryPage() {
                               </button>
                             ) : null}
                           </div>
+                          <p className="library-editor-format-hint">{t('editorFormatHint')}</p>
+                          <div className="library-editor-toolbar" role="toolbar" aria-label={t('pageText')}>
+                            <button type="button" title={t('formatBold')} aria-label={t('formatBold')} onMouseDown={(event) => event.preventDefault()} onClick={() => insertPageMarkup(idx, '**', '**', 'текст')}><Bold size={15} /></button>
+                            <button type="button" title={t('formatItalic')} aria-label={t('formatItalic')} onMouseDown={(event) => event.preventDefault()} onClick={() => insertPageMarkup(idx, '*', '*', 'текст')}><Italic size={15} /></button>
+                            <button type="button" title={t('formatHeading')} aria-label={t('formatHeading')} onMouseDown={(event) => event.preventDefault()} onClick={() => insertPageMarkup(idx, '# ', '', 'Заголовок')}><Heading2 size={15} /></button>
+                            <button type="button" title={t('formatQuote')} aria-label={t('formatQuote')} onMouseDown={(event) => event.preventDefault()} onClick={() => insertPageMarkup(idx, '> ', '', 'Цитата')}><Quote size={15} /></button>
+                            <button type="button" title={t('insertIllustration')} aria-label={t('insertIllustration')} onMouseDown={(event) => event.preventDefault()} onClick={() => illustrationFileRefs.current[idx]?.click()}><ImagePlus size={15} /><span>{t('insertIllustration')}</span></button>
+                            <input
+                              ref={(node) => { illustrationFileRefs.current[idx] = node; }}
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="hidden"
+                              onChange={(event) => void handleIllustrationUpload(idx, event)}
+                            />
+                          </div>
                           <textarea
-                            rows={3}
+                            ref={(node) => { pageTextareasRef.current[idx] = node; }}
+                            rows={6}
                             value={pg.text}
                             onChange={(e) => handleUpdatePage(idx, 'text', e.target.value)}
                             placeholder={t('pageTextPlaceholder')}
                             className="library-form-input library-page-textarea"
                           />
+                          {previewPageIndex === idx ? (
+                            <div className="library-page-editor-preview">
+                              <span>{t('previewPage')} · {idx + 1}</span>
+                              <PageSheet page={pg} number={idx + 1} side="right" />
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                     </div>
                   </div>
 
                   <div className="library-upload-actions">
+                    {!editingBookId ? <button type="button" className="library-outline-button" onClick={saveBookDraft}>{t('saveDraft')}</button> : null}
+                    <label className="library-rights-confirmation">
+                      <input type="checkbox" checked={rightsConfirmed} onChange={(event) => setRightsConfirmed(event.target.checked)} />
+                      <span>{t('rightsConfirmation')}</span>
+                    </label>
                     <button
                       type="button"
                       className="library-outline-button library-cancel-upload-btn"
@@ -1858,8 +2530,34 @@ export function LibraryPage() {
               );
             })()}
 
+            <ReaderAchievements userId={user?.id} />
             <p className="library-kicker">{t('profile')}</p>
             <h2 id="account-title">{t('profileTitle')}</h2>
+
+            <section className="library-profile-reading-lists" aria-labelledby="profile-reading-title">
+              <h3 id="profile-reading-title">{t('profileReadingLists')}</h3>
+              <p className="library-muted">{t('friendListShareInfo')}</p>
+              <div className="library-profile-reading-tabs" role="tablist" aria-label={t('profileReadingLists')}>
+                {(['want', 'reading', 'done'] as const).map((status) => (
+                  <button key={status} type="button" role="tab" aria-selected={profileReadingTab === status} className={profileReadingTab === status ? 'is-active' : ''} onClick={() => setProfileReadingTab(status)}>
+                    {t(`status${status[0].toUpperCase()}${status.slice(1)}` as 'statusWant' | 'statusReading' | 'statusDone')} <span>{readingListCounts[status]}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="library-profile-reading-items">
+                {profileReadingBooks.length ? profileReadingBooks.slice(0, profileReadingVisibleCount).map((book) => (
+                  <button type="button" className="library-profile-reading-item" key={book.id} onClick={() => { setAccountOpen(false); openReader(book); }}>
+                    <BookCover book={book} small categoryLabels={categoryLabels} />
+                    <span className="library-profile-reading-copy">
+                      <strong>{book.title}</strong>
+                      <small>{book.author}</small>
+                      <span>{book.summary}</span>
+                    </span>
+                  </button>
+                )) : <p className="library-muted">{t('emptyReadingList')}</p>}
+                {profileReadingVisibleCount < profileReadingBooks.length && <button type="button" className="library-outline-button library-profile-reading-more" onClick={() => setProfileReadingVisibleCount(count => count + 12)}>{({ ru: 'Показать ещё', en: 'Show more', kk: 'Тағы көрсету', zh: '显示更多' })[language]} ({Math.min(12, profileReadingBooks.length - profileReadingVisibleCount)})</button>}
+              </div>
+            </section>
 
             {/* Форма изменения никнейма */}
             <form onSubmit={handleSaveProfile} className="library-nickname-edit-form">
@@ -1948,7 +2646,7 @@ export function LibraryPage() {
                       <MessageCircle size={16} className="library-friend-chat-icon" aria-hidden="true" />
                     </button>
                     <div className="library-friend-actions">
-                      <button type="button" className="library-profile-button" onClick={async () => { setViewedProfile(friend); setViewedFriendStats(null); try { setViewedFriendStats(await fetchRemoteReader(friend.user_id)); } catch { setViewedFriendStats(null); } }}><UserRound size={14} /> <span>{t('profile')}</span></button>
+                      <button type="button" className="library-profile-button" onClick={async () => { setViewedProfile(friend); setViewedFriendStats(null); setViewedFriendListTab('want'); setViewedFriendProfileLoading(true); try { setViewedFriendStats(await fetchRemoteReader(friend.user_id)); } catch { setViewedFriendStats(null); } finally { setViewedFriendProfileLoading(false); } }}><UserRound size={14} /> <span>{t('profile')}</span></button>
                       <button type="button" className="library-friend-remove" onClick={async () => { if (!user?.id || !window.confirm(t('removeFriendConfirm'))) return; await removeFriend(user.id, friend.user_id); setFriends(await fetchFriends(user.id)); if (selectedFriend?.user_id === friend.user_id) setSelectedFriend(null); }} aria-label={t('removeFriend')} title={t('removeFriend')}><Trash2 size={14} /> <span>{t('removeFriend')}</span></button>
                     </div>
                   </div>
@@ -1983,7 +2681,29 @@ export function LibraryPage() {
             <h2 id="friend-profile-title">{viewedProfile.nickname}</h2>
             <p className="library-profile-stat"><span>{t('friendExperience')}</span><strong>{viewedFriendStats?.xp ?? 0} XP</strong></p>
             <p className="library-profile-stat"><span>{t('levelShort')}</span><strong>{viewedFriendStats?.level ?? 1}</strong></p>
-            <p className="library-muted">{t('friendProfileHint')}</p>
+            <section className="library-friend-reading-lists" aria-labelledby="friend-reading-title">
+              <h3 id="friend-reading-title">{t('friendReadingLists')}</h3>
+              <div className="library-profile-reading-tabs" role="tablist" aria-label={t('friendReadingLists')}>
+                {(['want', 'reading', 'done'] as const).map((status) => {
+                  const count = viewedFriendStats?.readingLists?.[status].length ?? 0;
+                  return <button key={status} type="button" role="tab" aria-selected={viewedFriendListTab === status} className={viewedFriendListTab === status ? 'is-active' : ''} onClick={() => setViewedFriendListTab(status)}>{t(`status${status[0].toUpperCase()}${status.slice(1)}` as 'statusWant' | 'statusReading' | 'statusDone')} <span>{count}</span></button>;
+                })}
+              </div>
+              {viewedFriendProfileLoading ? <p className="library-muted">{catalogText.loading}</p> : (
+                <div className="library-friend-reading-items">
+                  {(viewedFriendStats?.readingLists?.[viewedFriendListTab] || []).length ? (viewedFriendStats?.readingLists?.[viewedFriendListTab] || []).map((entry) => {
+                    const book = allBooks.find((item) => item.id === entry.bookId);
+                    return (
+                      <button type="button" className="library-friend-reading-item" key={entry.bookId} disabled={!book} onClick={() => { if (!book) return; setViewedProfile(null); openReader(book); }}>
+                        <strong>{entry.title}</strong>
+                        <small>{entry.author}</small>
+                        <span>{entry.summary}</span>
+                      </button>
+                    );
+                  }) : <p className="library-muted">{t('emptyReadingList')}</p>}
+                </div>
+              )}
+            </section>
           </section>
         </div>
       ) : null}

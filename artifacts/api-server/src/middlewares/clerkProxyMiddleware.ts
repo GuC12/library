@@ -64,6 +64,8 @@ export function clerkProxyMiddleware(): RequestHandler {
   }
 
   return createProxyMiddleware({
+    // Express already scopes this middleware. Never parse request input as a glob.
+    pathFilter: () => true,
     target: CLERK_FAPI,
     changeOrigin: true,
     // Take over the response so it can be re-sent with a Content-Length (see

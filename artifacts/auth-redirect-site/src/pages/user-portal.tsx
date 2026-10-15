@@ -6,6 +6,8 @@ import { Link, useLocation } from 'wouter';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { useLanguage } from '@/lib/i18n';
 import { DEFAULT_AVATAR, useUserProfile } from '@/lib/user-profile';
+import { deleteMyLibraryData } from '@/lib/supabase';
+import { clearAccountLocalData } from '@/lib/account-storage';
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -90,16 +92,14 @@ export function UserPortalPage() {
   const handleDeleteAccount = async () => {
     if (!window.confirm(t('deleteAccountConfirm'))) return;
     try {
-      if (user) {
-        await user.delete();
-      }
-      window.localStorage.clear();
+      if (!user) throw new Error('No active account');
+      await deleteMyLibraryData();
+      await user.delete();
+      clearAccountLocalData(user.id);
       window.location.href = `${window.location.origin}${basePath}/sign-up`;
     } catch (err) {
-      console.error(err);
-      window.localStorage.clear();
-      await signOut({ redirectUrl: `${window.location.origin}${basePath}/sign-up` });
-      setLocation('/sign-up');
+      console.error('Account deletion failed:', err);
+      setErrorMessage(t('deleteAccountError'));
     }
   };
 

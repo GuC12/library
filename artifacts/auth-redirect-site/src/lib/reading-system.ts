@@ -9,9 +9,42 @@ export interface ReadingStats {
 
 const STATS_KEY = 'library_reader_stats';
 let activeReaderId: string | null = null;
+const awardedPageFallback = new Set<string>();
 
 export function setActiveReaderId(id: string | null): void {
   activeReaderId = id;
+  if (!id || typeof window === 'undefined') return;
+
+  // Before Clerk accounts were connected, progress lived in one browser-wide
+  // key. Move that legacy record to the first signed-in account once, instead
+  // of silently starting that reader at level 1.
+  const migratedKey = `${STATS_KEY}:legacy-migrated`;
+  try {
+    if (window.localStorage.getItem(migratedKey)) return;
+    const legacyRaw = window.localStorage.getItem(STATS_KEY);
+    if (!legacyRaw) return;
+    const accountKey = `${STATS_KEY}:${id}`;
+    const legacy = JSON.parse(legacyRaw) as Partial<ReadingStats>;
+    const existingRaw = window.localStorage.getItem(accountKey);
+    const existing = existingRaw ? JSON.parse(existingRaw) as Partial<ReadingStats> : {};
+    const xp = Math.max(Number(legacy.xp) || 0, Number(existing.xp) || 0);
+    const restored: ReadingStats = {
+      xp,
+      level: calculateLevel(xp).level,
+      streakDays: Math.max(Number(legacy.streakDays) || 1, Number(existing.streakDays) || 1),
+      lastReadDate: String(existing.lastReadDate || legacy.lastReadDate || getTodayDateString()),
+      pagesRead: Math.max(Number(legacy.pagesRead) || 0, Number(existing.pagesRead) || 0),
+      booksFinished: Math.max(Number(legacy.booksFinished) || 0, Number(existing.booksFinished) || 0),
+    };
+    window.localStorage.setItem(accountKey, JSON.stringify(restored));
+    window.localStorage.setItem(migratedKey, id);
+    // Keep a recovery copy while preventing guest mode or another account
+    // from displaying the old shared progress.
+    window.localStorage.setItem(`${STATS_KEY}:legacy-backup`, legacyRaw);
+    window.localStorage.removeItem(STATS_KEY);
+  } catch {
+    // If storage is unavailable, keep the original record and continue safely.
+  }
 }
 
 function statsKey(): string {
@@ -26,6 +59,32 @@ export const BOOK_XP_PER_PAGE = 15;
 export function xpForBookPages(pagesCount: number): number {
   const safeCount = Number.isFinite(pagesCount) ? Math.max(1, Math.floor(pagesCount)) : 1;
   return BOOK_XP_BASE + safeCount * BOOK_XP_PER_PAGE;
+}
+
+/** Award XP once per page per account, including across browser reloads. */
+export function awardUniqueReadingPages(bookId: number, pageIndexes: number[]): { stats: ReadingStats; leveledUp: boolean; gainedXp: number; awardedPages: number } {
+  const storageKey = `library-reading-pages:${activeReaderId || 'guest'}`;
+  let awarded: Record<string, number[]> = {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || '{}') as Record<string, unknown>;
+    awarded = Object.fromEntries(Object.entries(parsed).map(([id, pages]) => [
+      id,
+      Array.isArray(pages) ? pages.filter((page): page is number => Number.isSafeInteger(page) && page >= 0) : [],
+    ]));
+  } catch { /* Use the in-memory guard when storage is unavailable. */ }
+
+  const bookKey = String(bookId);
+  const known = new Set([...(awarded[bookKey] || []), ...[...awardedPageFallback].filter((key) => key.startsWith(`${storageKey}:${bookKey}:`)).map((key) => Number(key.split(':').at(-1)))]);
+  const unique = [...new Set(pageIndexes.filter((page) => Number.isSafeInteger(page) && page >= 0))].filter((page) => !known.has(page));
+  if (!unique.length) return { stats: getStoredReadingStats(), leveledUp: false, gainedXp: 0, awardedPages: 0 };
+
+  const next = [...known, ...unique].sort((a, b) => a - b);
+  awarded[bookKey] = next;
+  for (const page of unique) awardedPageFallback.add(`${storageKey}:${bookKey}:${page}`);
+  try { window.localStorage.setItem(storageKey, JSON.stringify(awarded)); } catch { /* In-memory guard still prevents repeats in this session. */ }
+
+  const result = addReadingXp(unique.length * BOOK_XP_PER_PAGE, true, unique.length);
+  return { ...result, awardedPages: unique.length };
 }
 
 // Опыт, необходимый для каждого следующего уровня: уровень * 100 XP
@@ -115,7 +174,7 @@ export function getStoredReadingStats(): ReadingStats {
   return saveStoredReadingStats(initial);
 }
 
-export function addReadingXp(amount: number, isNewPage = true): { stats: ReadingStats; leveledUp: boolean; gainedXp: number } {
+export function addReadingXp(amount: number, isNewPage = true, pagesRead = isNewPage ? 1 : 0): { stats: ReadingStats; leveledUp: boolean; gainedXp: number } {
   const current = getStoredReadingStats();
   const today = getTodayDateString();
   const yesterday = getYesterdayDateString();
@@ -130,7 +189,7 @@ export function addReadingXp(amount: number, isNewPage = true): { stats: Reading
     streak = 1;
   }
 
-  const gainedXp = Math.max(0, amount || 0);
+  const gainedXp = Number.isFinite(amount) ? Math.max(0, Math.round(amount)) : 0;
   const newXp = (current.xp || 0) + gainedXp;
   const oldLevelInfo = calculateLevel(current.xp || 0);
   const newLevelInfo = calculateLevel(newXp);
@@ -141,7 +200,7 @@ export function addReadingXp(amount: number, isNewPage = true): { stats: Reading
     level: newLevelInfo.level,
     streakDays: streak,
     lastReadDate: today,
-    pagesRead: (current.pagesRead || 0) + (isNewPage ? 1 : 0),
+    pagesRead: (current.pagesRead || 0) + Math.max(0, Math.floor(pagesRead || 0)),
     booksFinished: current.booksFinished || 0,
   };
 
@@ -170,7 +229,21 @@ export interface ReaderRecord {
   booksFinished: number;
   booksPublished: number;
   updatedAt: number;
+  readingLists?: SharedReadingLists;
   isCurrentUser?: boolean;
+}
+
+export interface SharedReadingListItem {
+  bookId: number;
+  title: string;
+  author: string;
+  summary: string;
+}
+
+export interface SharedReadingLists {
+  want: SharedReadingListItem[];
+  reading: SharedReadingListItem[];
+  done: SharedReadingListItem[];
 }
 
 export function readerRecordFromStats(

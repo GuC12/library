@@ -357,5 +357,6 @@ export const SPECIAL_BOOK: Book = {
   coverImage: SPECIAL_BOOK_FRONT_COVER,
   summary:
     'Одно случайное письмо. Два разбитых сердца из прошлого. И тайна, способная изменить всё. Атмосферный детективный роман с готическим флером старинного города, загадочными шифрами и трогательной историей любви сквозь эпохи.',
+  downloadPath: 'special-book/letters-large.pdf',
   pages: specialBookPages,
 };

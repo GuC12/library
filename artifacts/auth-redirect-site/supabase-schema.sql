@@ -1,6 +1,4 @@
--- Выполнить в Supabase SQL Editor один раз.
--- reader_stats хранит статистику всех зарегистрированных пользователей,
--- а не только тех, кто сейчас открыл топ.
+-- Foundation only. Use supabase-setup.sql for the complete transactional setup.
 create table if not exists public.reader_stats (
   id text primary key,
   nickname text not null default 'Читатель',
@@ -20,18 +18,6 @@ create table if not exists public.book_likes (
   created_at timestamptz not null default now(),
   primary key (book_id, user_id)
 );
-
-alter table public.reader_stats enable row level security;
-alter table public.book_likes enable row level security;
-create policy "Public can read reader stats" on public.reader_stats for select using (true);
-create policy "Public can upsert reader stats" on public.reader_stats for insert with check (true);
-create policy "Public can update reader stats" on public.reader_stats for update using (true);
-create policy "Public can read likes" on public.book_likes for select using (true);
-create policy "Users can add likes" on public.book_likes for insert with check (true);
-create policy "Users can remove likes" on public.book_likes for delete using (true);
-
--- Включите Realtime для лайков, если хотите видеть новые лайки без перезагрузки:
-alter publication supabase_realtime add table public.book_likes;
 
 create table if not exists public.user_profiles (
   user_id text primary key,
@@ -59,41 +45,36 @@ create table if not exists public.chat_messages (
   created_at timestamptz not null default now()
 );
 
--- Безопасно примените для уже существующей базы:
 alter table public.chat_messages add column if not exists attachment_url text;
 
-alter table public.user_profiles enable row level security;
-alter table public.friendships enable row level security;
-alter table public.chat_messages enable row level security;
-create policy "Public can read profiles" on public.user_profiles for select using (true);
-create policy "Users can create profiles" on public.user_profiles for insert with check (true);
-create policy "Users can update profiles" on public.user_profiles for update using (true) with check (true);
-create policy "Public can read friendships" on public.friendships for select using (true);
-create policy "Users can create friendships" on public.friendships for insert with check (true);
-create policy "Users can update friendships" on public.friendships for update using (true) with check (true);
-create policy "Users can delete friendships" on public.friendships for delete using (true);
-create policy "Public can read chat messages" on public.chat_messages for select using (true);
-create policy "Users can send chat messages" on public.chat_messages for insert with check (true);
-create policy "Users can edit chat messages" on public.chat_messages for update using (true) with check (true);
-create policy "Users can delete chat messages" on public.chat_messages for delete using (true);
-alter publication supabase_realtime add table public.chat_messages;
+create table if not exists public.community_books (
+  id bigint primary key, owner_id text not null, title text not null, author text not null,
+  author_avatar text, category text not null, community_category text, language text default 'ru',
+  price integer not null default 0 check (price >= 0), spine text not null default '#8C704B',
+  summary text not null default '', cover_image text, pages jsonb not null default '[]'::jsonb,
+  is_user_book boolean not null default true, created_at timestamptz not null default now()
+);
 
--- Настройка фотографий чата. Выполните этот блок в Supabase SQL Editor.
--- Bucket должен быть публичным, чтобы изображения открывались у получателя.
-insert into storage.buckets (id, name, public)
-values ('chat-photos', 'chat-photos', true)
-on conflict (id) do update set public = true;
+-- The foundation grants no access. The following security migrations add policies.
+-- CREATE TABLE IF NOT EXISTS does not add columns to older installations.
+alter table public.community_books add column if not exists community_category text;
 
--- На случай, если таблица сообщений уже существовала до добавления фото:
-alter table public.chat_messages add column if not exists attachment_url text;
-do $$ begin
-  if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'Public can read chat photos') then
-    create policy "Public can read chat photos" on storage.objects for select using (bucket_id = 'chat-photos');
+do $$ declare item text; p record; begin
+  foreach item in array array['reader_stats','book_likes','user_profiles','friendships','chat_messages','community_books'] loop
+    execute format('alter table public.%I enable row level security', item);
+    execute format('revoke all on public.%I from anon, authenticated', item);
+  end loop;
+end $$;
+
+create index if not exists chat_conversation_idx on public.chat_messages(sender_id, receiver_id, created_at desc);
+create index if not exists friendships_recipient_idx on public.friendships(friend_id, status);
+
+do $$ declare item text; begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach item in array array['book_likes','chat_messages','community_books'] loop
+      if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = item) then
+        execute format('alter publication supabase_realtime add table public.%I', item);
+      end if;
+    end loop;
   end if;
-      if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'Users can upload chat photos') then
-        create policy "Users can upload chat photos" on storage.objects for insert with check (bucket_id = 'chat-photos');
-      end if;
-      if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'Users can update chat photos') then
-        create policy "Users can update chat photos" on storage.objects for update using (bucket_id = 'chat-photos') with check (bucket_id = 'chat-photos');
-      end if;
-  end $$;
+end $$;

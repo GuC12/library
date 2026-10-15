@@ -40,7 +40,18 @@ export function BookCoverArt({ book, side = 'front', compact = false, categoryLa
     <div className={`book-cover-art book-cover-edition book-cover-art-${side}${compact ? ' is-compact' : ''}`}
       data-cover-side={side} style={{ '--cover-tone': book.spine } as CSSProperties}>
       {side === 'front' && image ? (
-        <img className="book-cover-original-image" src={image} alt="" draggable={false} loading="lazy" />
+        <>
+          <img className="book-cover-original-image" src={image} alt="" draggable={false} loading="lazy" />
+          {(book.coverKind === 'portrait' || book.coverKind === 'illustration') && (
+            <div className="book-cover-artwork-lettering">
+              <span className="book-cover-art-category">{categoryLabel || book.category}</span>
+              <div className="book-cover-artwork-copy">
+                <strong className="book-cover-art-title">{book.title}</strong>
+                <span className="book-cover-art-author">{book.author}</span>
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <div className="book-cover-art-content">
           <span className="book-cover-art-category">{categoryLabel || book.category}</span>

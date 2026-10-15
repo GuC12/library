@@ -64,3 +64,13 @@ Thumbs.db
 # Imported previews and local browser data
 attached_assets/
 
+# Local import caches and document inspection artifacts
+**/.catalog-sources/
+**/source-cache/
+/font_*.ttf
+/font_*.cff
+/spread*_preview.png
+/kazakh_fetched.json
+/new_kazakh_books.json
+artifacts/auth-redirect-site/m.get*
+
