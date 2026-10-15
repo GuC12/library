@@ -33,7 +33,7 @@ const clerkAppearance = {
   options: {
     logoPlacement: 'inside' as const,
     logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/library-brand.svg`,
+    logoImageUrl: `${window.location.origin}${basePath}/library-book-logo.jpg`,
     socialButtonsPlacement: 'top' as const,
     socialButtonsVariant: 'blockButton' as const,
   },

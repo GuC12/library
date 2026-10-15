@@ -2,6 +2,7 @@ import { ArrowRight, BookOpen, LockKeyhole, LogOut, MoveUpRight, ShieldCheck, Sp
 import { useClerk, useUser } from '@clerk/react';
 import { Link } from 'wouter';
 import { LanguageSwitcher } from '@/components/language-switcher';
+import { LibraryBrandIcon } from '@/components/library-brand-icon';
 import { useLanguage } from '@/lib/i18n';
 import { DEFAULT_AVATAR, useUserProfile } from '@/lib/user-profile';
 import { Interactive3DBook } from '@/components/interactive-3d-book';
@@ -15,9 +16,7 @@ function GateMark({ compact = false }: { compact?: boolean }) {
 
   return (
     <span className={`inline-flex items-center gap-2.5 ${compact ? 'text-sm' : ''}`} data-testid="brand-gatehouse">
-      <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-[hsl(var(--sidebar))] shadow-sm">
-        <BookOpen className="h-5 w-5 text-[hsl(var(--card))]" strokeWidth={1.8} aria-hidden="true" />
-      </span>
+      <LibraryBrandIcon className="h-10 w-9" />
       <span className="font-serif text-xl font-semibold tracking-[-0.02em] text-[hsl(var(--foreground))]">{t('brand')}</span>
     </span>
   );
